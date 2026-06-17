@@ -31,6 +31,7 @@ class AppleMCPServer:
             status = await auth.authenticate()
         except Exception as exc:
             import logging
+
             logger = logging.getLogger("apple_mcp.server")
             logger.warning("Auth failed, services will be unavailable: %s", exc)
             status = None

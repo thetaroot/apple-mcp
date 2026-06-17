@@ -9,6 +9,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from apple_mcp.__version__ import VERSION
+
 logger = logging.getLogger("apple_mcp.transport.http")
 
 MCP_SESSION_HEADER = "Mcp-Session-Id"
@@ -38,7 +40,7 @@ async def _handle_request(request: Request) -> Response:
             result = {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "apple-mcp", "version": "1.0.0"},
+                "serverInfo": {"name": "apple-mcp", "version": VERSION},
             }
         elif method == "tools/list":
             result = {"tools": _serialize_tools(server._all_tools)}
@@ -84,7 +86,7 @@ async def _handle_health(request: Request) -> JSONResponse:
     return JSONResponse(
         {
             "status": "ok",
-            "version": "1.1.0",
+            "version": VERSION,
             "tools_registered": tool_count,
         }
     )

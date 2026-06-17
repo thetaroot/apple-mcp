@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 from typing import Any
 
@@ -14,6 +15,7 @@ class AppleMCPServer:
         self._services_ready = False
         self._tool_handler: dict[str, Any] = {}
         self._all_tools: list[Tool] = []
+        self._auth_ready = asyncio.Event()
 
     @property
     def mcp(self) -> Server:
@@ -66,13 +68,16 @@ class AppleMCPServer:
 
         @self._mcp.list_tools()
         async def list_tools() -> list[Tool]:
+            await self._auth_ready.wait()
             return self._all_tools
 
         @self._mcp.call_tool()
         async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+            await self._auth_ready.wait()
             return await self.handle_tool_call(name, arguments)
 
         self._services_ready = True
+        self._auth_ready.set()
 
     async def handle_tool_call(self, name: str, arguments: dict) -> list[TextContent]:
         handler = self._tool_handler.get(name)
@@ -96,8 +101,6 @@ class AppleMCPServer:
         from apple_mcp.transport.http import create_http_app
 
         app = create_http_app(self)
-        import asyncio
-
         import uvicorn
 
         svr = uvicorn.Config(app, host=host, port=port, log_level=self.config.log_level.lower())

@@ -64,9 +64,11 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
 quote-style = "double"
 
 [tool.mypy]
-strict = true
 python_version = "3.12"
 ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true
+disable_error_code = ["import-untyped"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

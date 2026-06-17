@@ -3,8 +3,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from mcp.types import Tool
-from pyicloud import PyiCloudService
-from pyicloud.services.calendar import CalendarObject, EventObject
+from pyicloud import PyiCloudService  # type: ignore[import-untyped]
+from pyicloud.services.calendar import CalendarObject, EventObject  # type: ignore[import-untyped]
 
 from apple_mcp.errors import ScopeError, ServiceUnavailableError
 from apple_mcp.services.scope import ScopeEngine

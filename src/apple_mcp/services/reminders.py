@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 
 from mcp.types import Tool
-from pyicloud import PyiCloudService
+from pyicloud import PyiCloudService  # type: ignore[import-untyped]
 
 from apple_mcp.errors import ScopeError, ServiceUnavailableError
 from apple_mcp.services.scope import ScopeEngine

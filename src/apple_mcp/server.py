@@ -1,4 +1,5 @@
 import inspect
+from typing import Any
 
 from mcp.server import Server
 from mcp.types import TextContent, Tool
@@ -11,7 +12,7 @@ class AppleMCPServer:
         self.config = config
         self._mcp = Server(server_name)
         self._services_ready = False
-        self._tool_handler: dict[str, object] = {}
+        self._tool_handler: dict[str, Any] = {}
         self._all_tools: list[Tool] = []
 
     @property

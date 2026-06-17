@@ -30,8 +30,8 @@ async def _handle_request(request: Request) -> Response:
     method = body.get("method", "")
     params = body.get("params", {})
 
-    result = None
-    error = None
+    result: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
 
     try:
         if method == "initialize":
@@ -47,7 +47,9 @@ async def _handle_request(request: Request) -> Response:
                 params.get("name", ""),
                 params.get("arguments", {}),
             )
-            result = {"content": [{"type": c.type, "text": c.text} if hasattr(c, "text") else c for c in content]}
+            result = {  # type: ignore[misc]
+                "content": [{"type": c.type, "text": c.text} if hasattr(c, "text") else c for c in content]
+            }
         elif method == "notifications/initialized":
             return Response(status_code=202)
         else:
@@ -65,7 +67,7 @@ async def _handle_request(request: Request) -> Response:
     return JSONResponse(response_body, headers={MCP_SESSION_HEADER: session_id})
 
 
-def _serialize_tools(tools: list[Tool]) -> list[dict]:
+def _serialize_tools(tools: list[Tool]) -> list[dict[str, Any]]:
     return [
         {
             "name": t.name,

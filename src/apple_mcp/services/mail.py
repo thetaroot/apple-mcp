@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from mailparser import MailParser
+from mailparser import MailParser  # type: ignore[import-untyped]
 from mcp.types import Tool
 
 from apple_mcp.errors import ScopeError, ServiceUnavailableError

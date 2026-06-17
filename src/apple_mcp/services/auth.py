@@ -1,8 +1,8 @@
 import logging
 
-import aioimaplib
-from pyicloud import PyiCloudService
-from pyicloud.exceptions import PyiCloudFailedLoginException
+import aioimaplib  # type: ignore[import-untyped]
+from pyicloud import PyiCloudService  # type: ignore[import-untyped]
+from pyicloud.exceptions import PyiCloudFailedLoginException  # type: ignore[import-untyped]
 
 from apple_mcp.config import ServerConfig
 from apple_mcp.errors import AuthError, ServiceUnavailableError

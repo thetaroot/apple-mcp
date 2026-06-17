@@ -67,9 +67,7 @@ class AuthService:
                 try:
                     password = self._resolve_password(account_config.password_env)
                     if not password:
-                        status.errors[f"mail.{account_config.email}"] = (
-                            f"No password for {account_config.email}"
-                        )
+                        status.errors[f"mail.{account_config.email}"] = f"No password for {account_config.email}"
                         continue
 
                     imap = aioimaplib.IMAP4_SSL(
@@ -87,8 +85,13 @@ class AuthService:
             status.mail_ok = len(self.mail_clients) > 0
 
         if status.errors:
-            logger.warning("Auth service status: calendar=%s reminders=%s mail=%s errors=%s",
-                           status.calendar_ok, status.reminders_ok, status.mail_ok, status.errors)
+            logger.warning(
+                "Auth service status: calendar=%s reminders=%s mail=%s errors=%s",
+                status.calendar_ok,
+                status.reminders_ok,
+                status.mail_ok,
+                status.errors,
+            )
 
         return status
 

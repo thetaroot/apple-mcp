@@ -67,12 +67,17 @@ class TestCalendarService:
             FakeCalendar("Work", "g1"),
         ]
 
-        result = asyncio.run(svc.handle("apple_calendar_create_event", {
-            "calendar_name": "Work",
-            "title": "Test Event",
-            "start_date": "2026-06-20T09:00:00",
-            "end_date": "2026-06-20T10:00:00",
-        }))
+        result = asyncio.run(
+            svc.handle(
+                "apple_calendar_create_event",
+                {
+                    "calendar_name": "Work",
+                    "title": "Test Event",
+                    "start_date": "2026-06-20T09:00:00",
+                    "end_date": "2026-06-20T10:00:00",
+                },
+            )
+        )
         parsed = json.loads(result)
         assert "error" in parsed or "scope_error" in parsed.get("type", "")
 

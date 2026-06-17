@@ -239,12 +239,14 @@ class CalendarService:
             name = getattr(cal, "title", "") or getattr(cal, "name", "")
             if not self._scope.calendar_visible(name):
                 continue
-            visible.append({
-                "name": name,
-                "guid": getattr(cal, "guid", ""),
-                "color": getattr(cal, "color", None),
-                "writable": self._scope.calendar_writable(name),
-            })
+            visible.append(
+                {
+                    "name": name,
+                    "guid": getattr(cal, "guid", ""),
+                    "color": getattr(cal, "color", None),
+                    "writable": self._scope.calendar_writable(name),
+                }
+            )
         return visible
 
     def _get_events(self, args: dict) -> list[dict]:
@@ -265,28 +267,26 @@ class CalendarService:
             from_dt = datetime.fromisoformat(from_str)
             to_dt = datetime.fromisoformat(to_str) if to_str else from_dt + timedelta(days=30)
 
-        events = self._api.calendar.get_events(
-            from_dt=from_dt, to_dt=to_dt, as_objs=True
-        )
+        events = self._api.calendar.get_events(from_dt=from_dt, to_dt=to_dt, as_objs=True)
         result = []
         for evt in events:
             if evt.pguid != cal.guid:
                 continue
-            result.append({
-                "guid": evt.guid,
-                "title": evt.title,
-                "start": str(evt.start_date) if evt.start_date else None,
-                "end": str(evt.end_date) if evt.end_date else None,
-                "all_day": evt.all_day,
-                "location": evt.location,
-            })
+            result.append(
+                {
+                    "guid": evt.guid,
+                    "title": evt.title,
+                    "start": str(evt.start_date) if evt.start_date else None,
+                    "end": str(evt.end_date) if evt.end_date else None,
+                    "all_day": evt.all_day,
+                    "location": evt.location,
+                }
+            )
         return result
 
     def _get_event(self, args: dict) -> dict:
         cal = self._get_calendar_by_name(args["calendar_name"])
-        detail = self._api.calendar.get_event_detail(
-            pguid=cal.guid, guid=args["event_id"]
-        )
+        detail = self._api.calendar.get_event_detail(pguid=cal.guid, guid=args["event_id"])
         return {
             "guid": getattr(detail, "guid", ""),
             "title": getattr(detail, "title", ""),
@@ -356,16 +356,8 @@ class CalendarService:
     def _search_events(self, args: dict) -> list[dict]:
         query = args["query"].lower()
         now = datetime.now(UTC)
-        from_dt = (
-            datetime.fromisoformat(args["from_date"])
-            if args.get("from_date")
-            else now - timedelta(days=90)
-        )
-        to_dt = (
-            datetime.fromisoformat(args["to_date"])
-            if args.get("to_date")
-            else now + timedelta(days=90)
-        )
+        from_dt = datetime.fromisoformat(args["from_date"]) if args.get("from_date") else now - timedelta(days=90)
+        to_dt = datetime.fromisoformat(args["to_date"]) if args.get("to_date") else now + timedelta(days=90)
 
         results = []
         cals = self._api.calendar.get_calendars(as_objs=True)
@@ -379,12 +371,14 @@ class CalendarService:
                     continue
                 haystack = f"{evt.title or ''} {evt.location or ''} {getattr(evt, 'description', '') or ''}".lower()
                 if query in haystack:
-                    results.append({
-                        "guid": evt.guid,
-                        "title": evt.title,
-                        "start": str(evt.start_date),
-                        "calendar": name,
-                    })
+                    results.append(
+                        {
+                            "guid": evt.guid,
+                            "title": evt.title,
+                            "start": str(evt.start_date),
+                            "calendar": name,
+                        }
+                    )
         return results
 
     def _add_calendar(self, args: dict) -> dict:
@@ -417,12 +411,14 @@ class CalendarService:
             for evt in events:
                 if evt.pguid != cal.guid:
                     continue
-                busy.append({
-                    "start": str(evt.start_date),
-                    "end": str(evt.end_date),
-                    "title": evt.title,
-                    "calendar": name,
-                })
+                busy.append(
+                    {
+                        "start": str(evt.start_date),
+                        "end": str(evt.end_date),
+                        "title": evt.title,
+                        "calendar": name,
+                    }
+                )
         return {"busy_slots": busy}
 
     def _get_changes(self, _args: dict) -> dict:
@@ -437,6 +433,6 @@ class CalendarService:
         self._scope.guard_read_only("calendar", "share_calendar")
         return {
             "status": "not_implemented",
-            "message":             f"Sharing calendars via iCloud API is limited. Share '{args['calendar_name']}' "
+            "message": f"Sharing calendars via iCloud API is limited. Share '{args['calendar_name']}' "
             f"with {args['email']} through the Calendar app instead.",
         }

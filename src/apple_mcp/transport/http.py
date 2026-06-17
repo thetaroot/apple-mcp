@@ -47,12 +47,7 @@ async def _handle_request(request: Request) -> Response:
                 params.get("name", ""),
                 params.get("arguments", {}),
             )
-            result = {
-                "content": [
-                    {"type": c.type, "text": c.text} if hasattr(c, "text") else c
-                    for c in content
-                ]
-            }
+            result = {"content": [{"type": c.type, "text": c.text} if hasattr(c, "text") else c for c in content]}
         elif method == "notifications/initialized":
             return Response(status_code=202)
         else:

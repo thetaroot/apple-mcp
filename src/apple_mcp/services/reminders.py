@@ -191,10 +191,7 @@ class RemindersService:
 
     def _get_visible_lists(self) -> list:
         all_lists = self._api.reminders.lists()
-        return [
-            lst for lst in all_lists
-            if self._scope.reminder_list_visible(getattr(lst, "title", ""))
-        ]
+        return [lst for lst in all_lists if self._scope.reminder_list_visible(getattr(lst, "title", ""))]
 
     def _find_list(self, name: str):
         for lst in self._get_visible_lists():
@@ -249,15 +246,17 @@ class RemindersService:
                 if due_date < datetime.fromisoformat(due_after):
                     continue
 
-            results.append({
-                "id": getattr(r, "id", ""),
-                "title": getattr(r, "title", ""),
-                "notes": getattr(r, "desc", ""),
-                "completed": getattr(r, "completed", False),
-                "priority": getattr(r, "priority", 0),
-                "flagged": getattr(r, "flagged", False),
-                "due_date": str(due_date) if due_date else None,
-            })
+            results.append(
+                {
+                    "id": getattr(r, "id", ""),
+                    "title": getattr(r, "title", ""),
+                    "notes": getattr(r, "desc", ""),
+                    "completed": getattr(r, "completed", False),
+                    "priority": getattr(r, "priority", 0),
+                    "flagged": getattr(r, "flagged", False),
+                    "due_date": str(due_date) if due_date else None,
+                }
+            )
         return results
 
     def _get_reminder(self, args: dict) -> dict:

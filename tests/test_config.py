@@ -1,4 +1,3 @@
-
 from apple_mcp.config import ServerConfig, load_config
 
 

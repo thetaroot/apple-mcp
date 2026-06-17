@@ -18,11 +18,14 @@ class TestMailService:
     def mail_clients(self):
         imap = AsyncMock()
         imap.select.return_value = FakeIMAPResult("OK")
-        imap.list.return_value = FakeIMAPResult("OK", [
-            b'(\\HasNoChildren) "/" "INBOX"',
-            b'(\\HasNoChildren) "/" "Sent"',
-            b'(\\HasNoChildren) "/" "Spam"',
-        ])
+        imap.list.return_value = FakeIMAPResult(
+            "OK",
+            [
+                b'(\\HasNoChildren) "/" "INBOX"',
+                b'(\\HasNoChildren) "/" "Sent"',
+                b'(\\HasNoChildren) "/" "Spam"',
+            ],
+        )
         return {"test@icloud.com": imap}
 
     @pytest.fixture
@@ -48,12 +51,15 @@ class TestMailService:
         svc = MailService(mail_clients, scope)
 
         imap = mail_clients["test@icloud.com"]
-        imap.list.return_value = FakeIMAPResult("OK", [
-            b'(\\HasNoChildren) "/" "INBOX"',
-            b'(\\HasNoChildren) "/" "Sent"',
-            b'(\\HasNoChildren) "/" "Spam"',
-            b'(\\HasNoChildren) "/" "Archive"',
-        ])
+        imap.list.return_value = FakeIMAPResult(
+            "OK",
+            [
+                b'(\\HasNoChildren) "/" "INBOX"',
+                b'(\\HasNoChildren) "/" "Sent"',
+                b'(\\HasNoChildren) "/" "Spam"',
+                b'(\\HasNoChildren) "/" "Archive"',
+            ],
+        )
 
         result = await svc._list_folders({"account": "test@icloud.com"})
         names = [f["name"] for f in result]
@@ -66,21 +72,27 @@ class TestMailService:
         scope = ScopeEngine(readonly_config)
         svc = MailService(mail_clients, scope)
 
-        result = await svc.handle("apple_mail_send", {
-            "account": "test@icloud.com",
-            "to": "someone@test.com",
-            "subject": "Test",
-            "body": "Hello",
-        })
+        result = await svc.handle(
+            "apple_mail_send",
+            {
+                "account": "test@icloud.com",
+                "to": "someone@test.com",
+                "subject": "Test",
+                "body": "Hello",
+            },
+        )
 
         parsed = json.loads(result)
         assert "error" in parsed
 
     @pytest.mark.asyncio
     async def test_folder_not_visible(self, scoped_mail):
-        result = await scoped_mail.handle("apple_mail_search", {
-            "account": "test@icloud.com",
-            "folder": "Spam",
-        })
+        result = await scoped_mail.handle(
+            "apple_mail_search",
+            {
+                "account": "test@icloud.com",
+                "folder": "Spam",
+            },
+        )
         parsed = json.loads(result)
         assert "error" in parsed

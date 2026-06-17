@@ -36,14 +36,17 @@ class AppleMCPServer:
 
         if self.config.enable_calendar and status.calendar_ok:
             from apple_mcp.services.calendar import CalendarService
+
             calendar_service = CalendarService(auth.pyicloud, scope)
 
         if self.config.enable_reminders and status.reminders_ok:
             from apple_mcp.services.reminders import RemindersService
+
             reminders_service = RemindersService(auth.pyicloud, scope)
 
         if self.config.enable_mail and status.mail_ok:
             from apple_mcp.services.mail import MailService
+
             mail_service = MailService(auth.mail_clients, scope)
 
         for svc in [calendar_service, reminders_service, mail_service]:
@@ -78,12 +81,15 @@ class AppleMCPServer:
     async def run_stdio(self) -> None:
         await self._init_services()
         from apple_mcp.transport.stdio import run_stdio_server
+
         await run_stdio_server(self._mcp)
 
     async def run_http(self, host: str = "0.0.0.0", port: int = 8080) -> None:
         await self._init_services()
         from apple_mcp.transport.http import create_http_app
+
         app = create_http_app(self)
         import uvicorn
+
         svr = uvicorn.Config(app, host=host, port=port, log_level=self.config.log_level.lower())
         await uvicorn.Server(svr).serve()

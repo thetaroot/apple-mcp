@@ -197,9 +197,7 @@ class MailService:
 
     async def _list_accounts(self, _args: dict) -> list[dict]:
         return [
-            {"email": email, "connected": True}
-            for email in self._clients
-            if self._scope.mail_account_visible(email)
+            {"email": email, "connected": True} for email in self._clients if self._scope.mail_account_visible(email)
         ]
 
     async def _list_folders(self, args: dict) -> list[dict]:
@@ -214,10 +212,12 @@ class MailService:
                 continue
             if not self._scope.mail_folder_visible(name):
                 continue
-            folders.append({
-                "name": name,
-                "writable": self._scope.mail_writable(),
-            })
+            folders.append(
+                {
+                    "name": name,
+                    "writable": self._scope.mail_writable(),
+                }
+            )
         return folders
 
     async def _search(self, args: dict) -> list[dict]:
@@ -267,11 +267,13 @@ class MailService:
 
         attachments = []
         for att in parsed.attachments:
-            attachments.append({
-                "filename": att.get("filename", "unnamed"),
-                "content_type": att.get("mail_content_type", "unknown"),
-                "size": len(att.get("payload", b"")),
-            })
+            attachments.append(
+                {
+                    "filename": att.get("filename", "unnamed"),
+                    "content_type": att.get("mail_content_type", "unknown"),
+                    "size": len(att.get("payload", b"")),
+                }
+            )
 
         return {
             "uid": args["uid"],

@@ -51,6 +51,12 @@ class ServerConfig(BaseModel):
         if not self.mail_password:
             self.mail_password = self.app_specific_password
 
+        valid_modes = {"read_write", "read_only"}
+        for field_name in ("calendar_mode", "reminder_mode", "mail_mode"):
+            value = getattr(self, field_name)
+            if value not in valid_modes:
+                raise ValueError(f"{field_name.upper()} must be 'read_write' or 'read_only', got '{value}'")
+
         if not self.mail_accounts and self.apple_id and self.enable_mail:
             self.mail_accounts = [
                 MailAccountConfig(

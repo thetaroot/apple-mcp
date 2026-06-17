@@ -1,3 +1,4 @@
+import contextlib
 import logging
 
 import aioimaplib  # type: ignore[import-untyped]
@@ -75,9 +76,14 @@ class AuthService:
                         port=account_config.imap_port,
                         timeout=15,
                     )
-                    await imap.wait_hello_from_server()
-                    await imap.login(account_config.email, password)
-                    self.mail_clients[account_config.email] = imap
+                    try:
+                        await imap.wait_hello_from_server()
+                        await imap.login(account_config.email, password)
+                        self.mail_clients[account_config.email] = imap
+                    except Exception:
+                        with contextlib.suppress(Exception):
+                            await imap.logout()
+                        raise
                 except Exception as exc:
                     status.errors[f"mail.{account_config.email}"] = str(exc)
                     logger.warning("Mail login failed for %s: %s", account_config.email, exc)

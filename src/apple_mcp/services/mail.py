@@ -1,5 +1,7 @@
 import json
 import logging
+import os
+import re
 from datetime import datetime
 from typing import Any
 
@@ -10,6 +12,11 @@ from apple_mcp.errors import ScopeError, ServiceUnavailableError
 from apple_mcp.services.scope import ScopeEngine
 
 logger = logging.getLogger("apple_mcp.services.mail")
+
+
+def _extract_uid_from_line(line: str) -> str | None:
+    m = re.search(r"UID\s+(\d+)", line)
+    return m.group(1) if m else None
 
 
 class MailService:
@@ -86,7 +93,7 @@ class MailService:
             ),
             Tool(
                 name="apple_mail_reply",
-                description="Reply to an existing email. Optionally include all original recipients (reply-all).",
+                description="Reply to an email. Full reply support is in development; currently not yet available.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -189,6 +196,13 @@ class MailService:
             raise ServiceUnavailableError(f"Mail account '{account}' is not connected")
         return client
 
+    def _get_account_config(self, email: str):
+
+        for acc in self._scope.config.mail_accounts:
+            if acc.email == email:
+                return acc
+        raise ServiceUnavailableError(f"Mail account config not found for '{email}'")
+
     async def _select_folder(self, imap, folder: str) -> None:
         folder_name = f'"{folder}"' if " " in folder else folder
         result = await imap.select(folder_name)
@@ -243,14 +257,12 @@ class MailService:
         limit = args.get("limit", 20)
         uids = uids[-limit:]
 
-        messages = []
-        for uid in uids:
-            fetch_result = await imap.uid("fetch", uid, "(FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)])")
-            msg_info = self._parse_header_fetch(uid, fetch_result)
-            if msg_info:
-                messages.append(msg_info)
+        if not uids:
+            return []
 
-        return messages
+        uid_set = ",".join(uids)
+        fetch_result = await imap.uid("fetch", uid_set, "(FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE)])")
+        return self._parse_batch_fetch(fetch_result)
 
     async def _get(self, args: dict) -> dict:
         imap = self._get_client(args["account"])
@@ -296,6 +308,9 @@ class MailService:
 
         import aiosmtplib
 
+        account_cfg = self._get_account_config(args["account"])
+        password = os.getenv(account_cfg.password_env, "") or os.getenv("APPLE_APP_SPECIFIC_PASSWORD", "")
+
         msg = MIMEMultipart("alternative")
         msg["From"] = args["account"]
         msg["To"] = args["to"]
@@ -311,11 +326,9 @@ class MailService:
         if args.get("cc"):
             recipients += [a.strip() for a in args["cc"].split(",")]
 
-        import os
-
-        smtp = aiosmtplib.SMTP(hostname="smtp.mail.me.com", port=587, use_tls=True)
+        smtp = aiosmtplib.SMTP(hostname=account_cfg.smtp_host, port=account_cfg.smtp_port, use_tls=True)
         await smtp.connect()
-        await smtp.login(args["account"], os.getenv("APPLE_APP_SPECIFIC_PASSWORD", ""))
+        await smtp.login(args["account"], password)
         await smtp.send_message(msg)
         await smtp.quit()
 
@@ -324,7 +337,7 @@ class MailService:
     async def _reply(self, args: dict) -> dict:
         if not self._scope.mail_writable():
             raise ScopeError("Mail is in read-only mode")
-        return {"status": "not_implemented", "note": "Reply support requires IMAP APPEND and more message parsing."}
+        return {"status": "not_implemented", "note": "Reply support requires IMAP APPEND. Coming in a future release."}
 
     async def _move(self, args: dict) -> dict:
         if not self._scope.mail_writable():
@@ -402,6 +415,45 @@ class MailService:
         if len(parts) >= 2:
             return parts[-2] if parts[-2] else (parts[-3] if len(parts) >= 4 else raw)
         return raw.strip()
+
+    def _parse_batch_fetch(self, result) -> list[dict[str, Any]]:
+        messages: list[dict[str, Any]] = []
+        uids_seen: set[str] = set()
+        if not hasattr(result, "lines"):
+            return messages
+        for line in result.lines:
+            if not isinstance(line, bytes):
+                continue
+            decoded = line.decode(errors="replace")
+            if not decoded.startswith("* "):
+                continue
+            uid_match = _extract_uid_from_line(decoded)
+            if uid_match and uid_match not in uids_seen:
+                uids_seen.add(uid_match)
+                info = self._parse_single_fetch_line(line)
+                if info:
+                    info["uid"] = uid_match
+                    messages.append(info)
+        return messages
+
+    def _parse_single_fetch_line(self, raw: bytes) -> dict | None:
+        try:
+            decoded = raw.decode(errors="replace")
+            lines = decoded.split("\r\n")
+            info: dict[str, Any] = {}
+            for line in lines:
+                lower = line.lower().strip()
+                if lower.startswith("from:"):
+                    info["from"] = line.strip()[5:].strip()
+                elif lower.startswith("to:"):
+                    info["to"] = line.strip()[3:].strip()
+                elif lower.startswith("subject:"):
+                    info["subject"] = line.strip()[8:].strip()
+                elif lower.startswith("date:"):
+                    info["date"] = line.strip()[5:].strip()
+            return info if info else None
+        except Exception:
+            return None
 
     def _parse_header_fetch(self, uid: str, result) -> dict | None:
         try:

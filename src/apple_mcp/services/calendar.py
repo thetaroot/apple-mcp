@@ -290,8 +290,8 @@ class CalendarService:
         return {
             "guid": getattr(detail, "guid", ""),
             "title": getattr(detail, "title", ""),
-            "start": str(getattr(detail, "start_date", "")),
-            "end": str(getattr(detail, "end_date", "")),
+            "start": str(detail.start_date) if getattr(detail, "start_date", None) else None,
+            "end": str(detail.end_date) if getattr(detail, "end_date", None) else None,
             "location": getattr(detail, "location", ""),
             "notes": getattr(detail, "description", ""),
             "all_day": getattr(detail, "all_day", False),

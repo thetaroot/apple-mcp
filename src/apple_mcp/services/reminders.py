@@ -268,7 +268,7 @@ class RemindersService:
             "completed": getattr(r, "completed", False),
             "priority": getattr(r, "priority", 0),
             "flagged": getattr(r, "flagged", False),
-            "due_date": str(getattr(r, "due_date", None)),
+            "due_date": str(getattr(r, "due_date", None)) if getattr(r, "due_date", None) else None,
         }
 
     def _create(self, args: dict) -> dict:
@@ -343,15 +343,10 @@ class RemindersService:
     def _add_alarm(self, args: dict) -> dict:
         self._scope.guard_read_only("reminders", "add_alarm")
         reminder = self._api.reminders.get(args["reminder_id"])
-        alarm, trigger = self._api.reminders.add_location_trigger(
-            reminder,
-            title="Alarm",
-            address="",
-            latitude=0,
-            longitude=0,
-            radius=0,
-        )
-        return {"status": "alarm_added", "alarm_id": getattr(alarm, "id", "")}
+        alarm_dt = datetime.fromisoformat(args["alarm_time"])
+        reminder.due_date = alarm_dt
+        self._api.reminders.update(reminder)
+        return {"status": "alarm_added", "due_date": str(alarm_dt)}
 
     def _add_hashtag(self, args: dict) -> dict:
         self._scope.guard_read_only("reminders", "add_hashtag")

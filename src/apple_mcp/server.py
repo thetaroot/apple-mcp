@@ -93,11 +93,17 @@ class AppleMCPServer:
         await run_stdio_server(self._mcp)
 
     async def run_http(self, host: str = "0.0.0.0", port: int = 8080) -> None:
-        await self._init_services()
         from apple_mcp.transport.http import create_http_app
 
         app = create_http_app(self)
+        import asyncio
+
         import uvicorn
 
         svr = uvicorn.Config(app, host=host, port=port, log_level=self.config.log_level.lower())
+
+        async def _init_bg() -> None:
+            await self._init_services()
+
+        asyncio.ensure_future(_init_bg())
         await uvicorn.Server(svr).serve()

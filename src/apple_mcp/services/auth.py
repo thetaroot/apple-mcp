@@ -6,7 +6,7 @@ from pyicloud import PyiCloudService  # type: ignore[import-untyped]
 from pyicloud.exceptions import PyiCloudFailedLoginException  # type: ignore[import-untyped]
 
 from apple_mcp.config import ServerConfig
-from apple_mcp.errors import AuthError, ServiceUnavailableError
+from apple_mcp.errors import AuthError
 from apple_mcp.services import ServiceStatus
 
 logger = logging.getLogger("apple_mcp.services.auth")
@@ -110,9 +110,3 @@ class AuthService:
         if pw:
             return pw
         return self.config.mail_password or self.config.app_specific_password
-
-    def get_mail_client(self, email: str) -> aioimaplib.IMAP4_SSL:
-        client = self.mail_clients.get(email)
-        if client is None:
-            raise ServiceUnavailableError(f"Mail account '{email}' is not connected")
-        return client

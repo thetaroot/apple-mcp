@@ -78,10 +78,23 @@ def _serialize_tools(tools: list[Tool]) -> list[dict[str, Any]]:
     ]
 
 
+async def _handle_health(request: Request) -> JSONResponse:
+    server = request.app.state.server
+    tool_count = len(server._tool_handler)
+    return JSONResponse(
+        {
+            "status": "ok",
+            "version": "1.1.0",
+            "tools_registered": tool_count,
+        }
+    )
+
+
 def create_http_app(apple_mcp_server) -> Starlette:
     app = Starlette(
         routes=[
             Route("/mcp", _handle_request, methods=["POST", "DELETE"]),
+            Route("/health", _handle_health, methods=["GET"]),
         ]
     )
     app.state.server = apple_mcp_server

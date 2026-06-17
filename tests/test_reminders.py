@@ -29,7 +29,7 @@ class TestRemindersService:
         scope = ScopeEngine(base_config)
         svc = RemindersService(mock_pyicloud, scope)
         tools = svc.tools()
-        assert len(tools) == 12
+        assert len(tools) == 15
 
     def test_list_lists_filtered(self, scoped_config, mock_pyicloud):
         scope = ScopeEngine(scoped_config)

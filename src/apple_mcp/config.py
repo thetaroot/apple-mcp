@@ -1,7 +1,8 @@
 import json
 import os
+import re
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class MailAccountConfig(BaseModel):
@@ -13,6 +14,13 @@ class MailAccountConfig(BaseModel):
     smtp_port: int = 587
     password_env: str = ""
     folders_allow: list[str] = Field(default_factory=lambda: ["INBOX", "Sent"])
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v):
+            raise ValueError(f"Invalid email address: {v}")
+        return v
 
 
 class ServerConfig(BaseModel):

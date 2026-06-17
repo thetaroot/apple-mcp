@@ -93,7 +93,7 @@ class MailService:
             ),
             Tool(
                 name="apple_mail_reply",
-                description="Reply to an email. Full reply support is in development; currently not yet available.",
+                description="Reply to an existing email. Quoted text from the original is included automatically.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -294,8 +294,9 @@ class MailService:
             "cc": parsed.cc,
             "subject": parsed.subject,
             "date": str(parsed.date) if parsed.date else None,
+            "message_id": parsed.message_id or "",
             "body_text": parsed.body,
-            "body_html": bool(parsed.body_html),
+            "body_html": parsed.body_html or "",
             "attachments": attachments,
         }
 
@@ -337,7 +338,46 @@ class MailService:
     async def _reply(self, args: dict) -> dict:
         if not self._scope.mail_writable():
             raise ScopeError("Mail is in read-only mode")
-        return {"status": "not_implemented", "note": "Reply support requires IMAP APPEND. Coming in a future release."}
+
+        account_cfg = self._get_account_config(args["account"])
+        password = os.getenv(account_cfg.password_env, "") or os.getenv("APPLE_APP_SPECIFIC_PASSWORD", "")
+
+        old = await self._get(args)
+        if not old or old.get("uid") != args["uid"]:
+            raise ServiceUnavailableError(f"Cannot fetch original email {args['uid']} for reply")
+
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        import aiosmtplib
+
+        msg = MIMEMultipart("alternative")
+        msg["From"] = args["account"]
+        msg["To"] = old.get("from", "")
+        msg["Subject"] = f"Re: {old.get('subject', '')}"
+        body = "\n\n> ".join(
+            [
+                args["body"],
+                f"On {old.get('date') or ''}, {old.get('from') or ''} wrote:",
+                old.get("body_text") or "",
+            ]
+        )
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+
+        old_msg_id = old.get("message_id", "")
+        if old_msg_id:
+            msg["In-Reply-To"] = old_msg_id
+            msg["References"] = old_msg_id
+
+        recipients = [a.strip() for a in old.get("from", "").split(",") if a.strip()]
+
+        smtp = aiosmtplib.SMTP(hostname=account_cfg.smtp_host, port=account_cfg.smtp_port, use_tls=True)
+        await smtp.connect()
+        await smtp.login(args["account"], password)
+        await smtp.send_message(msg, sender=args["account"], recipients=recipients)
+        await smtp.quit()
+
+        return {"status": "replied", "to": old.get("from", ""), "subject": msg["Subject"]}
 
     async def _move(self, args: dict) -> dict:
         if not self._scope.mail_writable():

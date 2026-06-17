@@ -35,6 +35,7 @@ class RemindersService:
                         "due_after": {"type": "string", "description": "ISO date — reminders due after this."},
                         "priority": {"type": "integer", "description": "0=none, 1=high, 5=medium, 9=low."},
                         "flagged_only": {"type": "boolean", "default": False},
+                        "limit": {"type": "integer", "description": "Max reminders to return.", "default": 200},
                     },
                 },
             ),
@@ -152,8 +153,56 @@ class RemindersService:
             ),
             Tool(
                 name="apple_reminders_get_changes",
-                description="Get a sync token for tracking incremental changes to reminders.",
-                inputSchema={"type": "object", "properties": {}},
+                description="Get a sync cursor for tracking changes. Pass a previous cursor to see what was modified.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "cursor": {
+                            "type": "string",
+                            "description": "Previous sync cursor. Omit on first call to get an initial cursor.",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="apple_reminders_create_recurrence",
+                description="Add a recurrence rule to a reminder (daily, weekly, monthly, yearly).",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "reminder_id": {"type": "string"},
+                        "frequency": {
+                            "type": "string",
+                            "enum": ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"],
+                        },
+                        "interval": {"type": "integer", "description": "Repeat every N units.", "default": 1},
+                        "occurrence_count": {"type": "integer", "description": "Total occurrences.", "default": 0},
+                    },
+                    "required": ["reminder_id", "frequency"],
+                },
+            ),
+            Tool(
+                name="apple_reminders_get_recurrence_rules",
+                description="Get all recurrence rules attached to a reminder.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "reminder_id": {"type": "string"},
+                    },
+                    "required": ["reminder_id"],
+                },
+            ),
+            Tool(
+                name="apple_reminders_delete_recurrence",
+                description="Delete a recurrence rule from a reminder.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "reminder_id": {"type": "string"},
+                        "rule_index": {"type": "integer", "description": "Index of the rule to delete (0-based)."},
+                    },
+                    "required": ["reminder_id", "rule_index"],
+                },
             ),
         ]
 
@@ -174,6 +223,9 @@ class RemindersService:
             "apple_reminders_add_hashtag": self._add_hashtag,
             "apple_reminders_add_url": self._add_url,
             "apple_reminders_get_changes": self._get_changes,
+            "apple_reminders_create_recurrence": self._create_recurrence,
+            "apple_reminders_get_recurrence_rules": self._get_recurrence_rules,
+            "apple_reminders_delete_recurrence": self._delete_recurrence,
         }
 
         handler = handlers.get(name)
@@ -218,6 +270,7 @@ class RemindersService:
         due_after = args.get("due_after")
         priority = args.get("priority")
         flagged_only = args.get("flagged_only", False)
+        limit = args.get("limit", 200)
 
         if list_name:
             target_list = self._find_list(list_name)
@@ -257,6 +310,8 @@ class RemindersService:
                     "due_date": str(due_date) if due_date else None,
                 }
             )
+            if len(results) >= limit:
+                break
         return results
 
     def _get_reminder(self, args: dict) -> dict:
@@ -299,10 +354,9 @@ class RemindersService:
             raise ScopeError(f"Reminder {args['reminder_id']} not found")
 
         changed = False
-        for field in ("title",):
-            if field in args:
-                setattr(reminder, field, args[field])
-                changed = True
+        if "title" in args:
+            reminder.title = args["title"]
+            changed = True
         if "notes" in args:
             reminder.desc = args["notes"]
             changed = True
@@ -360,9 +414,67 @@ class RemindersService:
         self._api.reminders.create_url_attachment(reminder, url=args["url"])
         return {"status": "url_attached", "url": args["url"]}
 
-    def _get_changes(self, _args: dict) -> dict:
-        lists = self._list_lists({})
-        return {
-            "lists": lists,
-            "note": "Sync cursor not yet available. Re-fetch reminders to detect changes.",
-        }
+    def _get_changes(self, args: dict) -> dict:
+        cursor = args.get("cursor")
+        if cursor:
+            events = []
+            for change in self._api.reminders.iter_changes(since=cursor):
+                reminder_data = None
+                if change.reminder is not None:
+                    r = change.reminder
+                    reminder_data = {
+                        "id": getattr(r, "id", ""),
+                        "title": getattr(r, "title", ""),
+                        "completed": getattr(r, "completed", False),
+                    }
+                events.append(
+                    {
+                        "type": getattr(change, "type", "unknown"),
+                        "reminder_id": getattr(change, "reminder_id", ""),
+                        "reminder": reminder_data,
+                    }
+                )
+            new_cursor = self._api.reminders.sync_cursor()
+            return {"cursor": new_cursor, "events": events}
+        else:
+            cursor = self._api.reminders.sync_cursor()
+            return {"cursor": cursor, "events": [], "note": "Cursor created. Save it and pass back to get changes."}
+
+    def _create_recurrence(self, args: dict) -> dict:
+        self._scope.guard_read_only("reminders", "create_recurrence")
+        from pyicloud.services.reminders.models import RecurrenceFrequency  # type: ignore[import-untyped]
+
+        reminder = self._api.reminders.get(args["reminder_id"])
+        freq = getattr(RecurrenceFrequency, args["frequency"], RecurrenceFrequency.DAILY)
+        rule = self._api.reminders.create_recurrence_rule(
+            reminder,
+            frequency=freq,
+            interval=args.get("interval", 1),
+            occurrence_count=args.get("occurrence_count", 0),
+        )
+        return {"status": "recurrence_created", "rule_id": getattr(rule, "id", "")}
+
+    def _get_recurrence_rules(self, args: dict) -> dict:
+        reminder = self._api.reminders.get(args["reminder_id"])
+        rules = []
+        for rule in self._api.reminders.recurrence_rules_for(reminder):
+            rules.append(
+                {
+                    "id": getattr(rule, "id", ""),
+                    "frequency": str(getattr(rule, "frequency", "")),
+                    "interval": getattr(rule, "interval", 1),
+                    "occurrence_count": getattr(rule, "occurrence_count", 0),
+                }
+            )
+        return {"recurrence_rules": rules}
+
+    def _delete_recurrence(self, args: dict) -> dict:
+        self._scope.guard_read_only("reminders", "delete_recurrence")
+        reminder = self._api.reminders.get(args["reminder_id"])
+        rules = self._api.reminders.recurrence_rules_for(reminder)
+        rules_list = list(rules)
+        idx = args["rule_index"]
+        if idx < 0 or idx >= len(rules_list):
+            raise ScopeError(f"Invalid rule_index {idx}: reminder has {len(rules_list)} rules")
+        self._api.reminders.delete_recurrence_rule(reminder, rules_list[idx])
+        return {"status": "recurrence_deleted", "rule_index": idx}

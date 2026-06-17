@@ -50,6 +50,7 @@ class CalendarService:
                             "enum": ["day", "week", "month"],
                             "description": "Shortcut: show events for this period starting from from_date.",
                         },
+                        "limit": {"type": "integer", "description": "Max events to return.", "default": 100},
                     },
                     "required": ["calendar_name"],
                 },
@@ -68,7 +69,7 @@ class CalendarService:
             ),
             Tool(
                 name="apple_calendar_create_event",
-                description="Create a new event on a calendar. Supports alarms, invitees, location, and notes.",
+                description="Create a new event. Supports alarms, invitees, location, notes, and recurrence.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -88,13 +89,18 @@ class CalendarService:
                             "type": "integer",
                             "description": "Minutes before event to trigger alarm.",
                         },
+                        "recurrence": {
+                            "type": "string",
+                            "description": "RRULE string for recurring events, e.g. FREQ=WEEKLY;COUNT=10",
+                        },
+                        "limit": {"type": "integer", "description": "Max events to return.", "default": 100},
                     },
                     "required": ["calendar_name", "title", "start_date", "end_date"],
                 },
             ),
             Tool(
                 name="apple_calendar_update_event",
-                description="Update fields of an existing event. Only provide the fields you want to change.",
+                description="Update an event's fields. Only provide the fields you want to change.",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -105,6 +111,7 @@ class CalendarService:
                         "end_date": {"type": "string"},
                         "location": {"type": "string"},
                         "notes": {"type": "string"},
+                        "recurrence": {"type": "string", "description": "Updated RRULE string."},
                     },
                     "required": ["calendar_name", "event_id"],
                 },
@@ -130,6 +137,7 @@ class CalendarService:
                         "query": {"type": "string", "description": "Search term — matches title, location, and notes."},
                         "from_date": {"type": "string"},
                         "to_date": {"type": "string"},
+                        "limit": {"type": "integer", "description": "Max results.", "default": 50},
                     },
                     "required": ["query"],
                 },
@@ -171,22 +179,21 @@ class CalendarService:
             ),
             Tool(
                 name="apple_calendar_get_changes",
-                description="Get a sync token for incremental calendar change tracking.",
+                description="Get a change tag (ctag) for each visible calendar. If it changes, events were modified.",
                 inputSchema={
                     "type": "object",
                     "properties": {},
                 },
             ),
             Tool(
-                name="apple_calendar_share_calendar",
-                description="Share a calendar with someone by email address.",
+                name="apple_calendar_get_calendar_info",
+                description="Get detailed info about a calendar, including sharing status, participants, and URLs.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "calendar_name": {"type": "string"},
-                        "email": {"type": "string", "description": "Email of the person to share with."},
                     },
-                    "required": ["calendar_name", "email"],
+                    "required": ["calendar_name"],
                 },
             ),
         ]
@@ -207,7 +214,7 @@ class CalendarService:
             "apple_calendar_remove_calendar": self._remove_calendar,
             "apple_calendar_get_availability": self._get_availability,
             "apple_calendar_get_changes": self._get_changes,
-            "apple_calendar_share_calendar": self._share_calendar,
+            "apple_calendar_get_calendar_info": self._get_calendar_info,
         }
 
         handler = handlers.get(name)
@@ -254,6 +261,7 @@ class CalendarService:
         from_str = args.get("from_date", datetime.now(UTC).strftime("%Y-%m-%d"))
         to_str = args.get("to_date")
         period = args.get("period")
+        limit = args.get("limit", 100)
 
         if period:
             from_dt = datetime.fromisoformat(from_str)
@@ -282,6 +290,8 @@ class CalendarService:
                     "location": evt.location,
                 }
             )
+            if len(result) >= limit:
+                break
         return result
 
     def _get_event(self, args: dict) -> dict:
@@ -299,9 +309,6 @@ class CalendarService:
 
     def _create_event(self, args: dict) -> dict:
         cal = self._get_calendar_by_name(args["calendar_name"])
-        if not self._scope.calendar_writable(args["calendar_name"]):
-            raise ScopeError("Calendar is read-only — cannot create events")
-
         self._scope.guard_read_only("calendar", "create_event")
 
         event = EventObject(
@@ -313,6 +320,8 @@ class CalendarService:
             all_day=args.get("all_day", False),
         )
 
+        if args.get("recurrence"):
+            event.recurrence = args["recurrence"]
         if args.get("invitees"):
             event.add_invitees(args["invitees"])
         if args.get("alarm_minutes_before") is not None:
@@ -323,8 +332,6 @@ class CalendarService:
 
     def _update_event(self, args: dict) -> dict:
         cal = self._get_calendar_by_name(args["calendar_name"])
-        if not self._scope.calendar_writable(args["calendar_name"]):
-            raise ScopeError("Calendar is read-only — cannot update events")
         self._scope.guard_read_only("calendar", "update_event")
 
         detail = self._api.calendar.get_event_detail(pguid=cal.guid, guid=args["event_id"])
@@ -339,16 +346,15 @@ class CalendarService:
             detail.location = args["location"]
         if "notes" in args:
             detail.description = args["notes"]
+        if "recurrence" in args:
+            detail.recurrence = args["recurrence"]
 
         self._api.calendar.add_event(detail)
         return {"status": "updated", "guid": args["event_id"]}
 
     def _delete_event(self, args: dict) -> dict:
         cal = self._get_calendar_by_name(args["calendar_name"])
-        if not self._scope.calendar_writable(args["calendar_name"]):
-            raise ScopeError("Calendar is read-only — cannot delete events")
         self._scope.guard_read_only("calendar", "delete_event")
-
         detail = self._api.calendar.get_event_detail(pguid=cal.guid, guid=args["event_id"])
         self._api.calendar.remove_event(detail)
         return {"status": "deleted", "guid": args["event_id"]}
@@ -392,8 +398,6 @@ class CalendarService:
     def _remove_calendar(self, args: dict) -> dict:
         self._scope.guard_read_only("calendar", "remove_calendar")
         cal = self._get_calendar_by_name(args["calendar_name"])
-        if not self._scope.calendar_writable(args["calendar_name"]):
-            raise ScopeError("Calendar is read-only")
         self._api.calendar.remove_calendar(cal.guid)
         return {"status": "deleted", "name": args["calendar_name"]}
 
@@ -422,17 +426,25 @@ class CalendarService:
         return {"busy_slots": busy}
 
     def _get_changes(self, _args: dict) -> dict:
-        calendars = self._list_calendars({})
-        return {
-            "calendars": calendars,
-            "note": "Sync cursor not yet available. Re-fetch events to detect changes.",
-        }
+        changes = {}
+        cals = self._api.calendar.get_calendars(as_objs=True)
+        for cal in cals:
+            name = getattr(cal, "title", "") or getattr(cal, "name", "")
+            if not self._scope.calendar_visible(name):
+                continue
+            ctag = self._api.calendar.get_ctag(cal.guid)
+            changes[name] = {"guid": cal.guid, "ctag": ctag}
+        return {"calendars": changes}
 
-    def _share_calendar(self, args: dict) -> dict:
-        self._get_calendar_by_name(args["calendar_name"])
-        self._scope.guard_read_only("calendar", "share_calendar")
+    def _get_calendar_info(self, args: dict) -> dict:
+        cal = self._get_calendar_by_name(args["calendar_name"])
         return {
-            "status": "not_implemented",
-            "message": f"Sharing calendars via iCloud API is limited. Share '{args['calendar_name']}' "
-            f"with {args['email']} through the Calendar app instead.",
+            "name": getattr(cal, "title", ""),
+            "guid": cal.guid,
+            "color": getattr(cal, "color", None),
+            "share_type": getattr(cal, "share_type", None),
+            "published_url": getattr(cal, "published_url", None),
+            "shared_url": getattr(cal, "shared_url", None),
+            "is_family": getattr(cal, "is_family", False),
+            "read_only": getattr(cal, "read_only", False),
         }

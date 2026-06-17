@@ -3,6 +3,7 @@ import asyncio
 import logging
 import sys
 
+from apple_mcp.__version__ import VERSION
 from apple_mcp.config import load_config
 from apple_mcp.server import AppleMCPServer
 
@@ -11,6 +12,7 @@ logger = logging.getLogger("apple_mcp")
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Apple MCP Server")
+    parser.add_argument("--version", action="version", version=f"apple-mcp {VERSION}")
     parser.add_argument(
         "--transport",
         choices=["http", "stdio"],

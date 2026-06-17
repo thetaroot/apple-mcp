@@ -10,8 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY dist/*.whl /tmp/
-RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
+COPY dist/ /tmp/dist/
+RUN if [ -n "$(ls /tmp/dist/*.whl 2>/dev/null)" ]; then \
+        pip install --no-cache-dir /tmp/dist/apple_mcp*.whl; \
+    else \
+        pip install --no-cache-dir .; \
+    fi && rm -rf /tmp/dist
 
 USER nobody
 

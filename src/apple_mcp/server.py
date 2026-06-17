@@ -27,7 +27,13 @@ class AppleMCPServer:
         from apple_mcp.services.scope import ScopeEngine
 
         auth = AuthService(self.config)
-        status = await auth.authenticate()
+        try:
+            status = await auth.authenticate()
+        except Exception as exc:
+            import logging
+            logger = logging.getLogger("apple_mcp.server")
+            logger.warning("Auth failed, services will be unavailable: %s", exc)
+            status = None
 
         scope = ScopeEngine(self.config)
 
@@ -35,17 +41,17 @@ class AppleMCPServer:
         reminders_service = None
         mail_service = None
 
-        if self.config.enable_calendar and status.calendar_ok:
+        if status and self.config.enable_calendar and status.calendar_ok:
             from apple_mcp.services.calendar import CalendarService
 
             calendar_service = CalendarService(auth.pyicloud, scope)
 
-        if self.config.enable_reminders and status.reminders_ok:
+        if status and self.config.enable_reminders and status.reminders_ok:
             from apple_mcp.services.reminders import RemindersService
 
             reminders_service = RemindersService(auth.pyicloud, scope)
 
-        if self.config.enable_mail and status.mail_ok:
+        if status and self.config.enable_mail and status.mail_ok:
             from apple_mcp.services.mail import MailService
 
             mail_service = MailService(auth.mail_clients, scope)

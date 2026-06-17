@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class MailAccountConfig(BaseModel):
     type: str = Field(default="icloud")
-    email: str
+    email: str = ""
     imap_host: str = ""
     imap_port: int = 993
     smtp_host: str = ""
@@ -18,7 +18,7 @@ class MailAccountConfig(BaseModel):
     @field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
-        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v):
+        if v and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v):
             raise ValueError(f"Invalid email address: {v}")
         return v
 
@@ -52,6 +52,8 @@ class ServerConfig(BaseModel):
     log_level: str = "INFO"
 
     def model_post_init(self, _context: object) -> None:
+        if self.apple_id and not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", self.apple_id):
+            raise ValueError(f"APPLE_ID must be a valid email address, got: {self.apple_id}")
         if not self.calendar_password:
             self.calendar_password = self.app_specific_password
         if not self.reminders_password:

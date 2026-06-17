@@ -1,0 +1,25 @@
+services:
+  apple-mcp:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - APPLE_ID=${APPLE_ID}
+      - APPLE_APP_SPECIFIC_PASSWORD=${APPLE_APP_SPECIFIC_PASSWORD}
+      - APPLE_ENABLE_CALENDAR=${APPLE_ENABLE_CALENDAR:-true}
+      - APPLE_ENABLE_REMINDERS=${APPLE_ENABLE_REMINDERS:-true}
+      - APPLE_ENABLE_MAIL=${APPLE_ENABLE_MAIL:-true}
+      - APPLE_CALENDAR_NAMES=${APPLE_CALENDAR_NAMES:-}
+      - APPLE_CALENDAR_EXCLUDE=${APPLE_CALENDAR_EXCLUDE:-}
+      - APPLE_REMINDER_LISTS=${APPLE_REMINDER_LISTS:-}
+      - APPLE_REMINDER_EXCLUDE=${APPLE_REMINDER_EXCLUDE:-}
+      - APPLE_MAIL_FOLDERS=${APPLE_MAIL_FOLDERS:-}
+      - APPLE_MAIL_EXCLUDE_FOLDERS=${APPLE_MAIL_EXCLUDE_FOLDERS:-}
+      - APPLE_MAIL_ACCOUNTS=${APPLE_MAIL_ACCOUNTS:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import apple_mcp"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

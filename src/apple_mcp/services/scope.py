@@ -54,6 +54,12 @@ class ScopeEngine:
             return True
         return email in configured_emails
 
+    def mail_address_visible(self, address: str) -> bool:
+        if not self.config.mail_addresses:
+            return True
+        address_lower = address.lower()
+        return any(a.lower() in address_lower for a in self.config.mail_addresses)
+
     def guard_read_only(self, service: str, operation: str) -> None:
         modes = {
             "calendar": self.config.calendar_mode,

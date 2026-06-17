@@ -183,6 +183,14 @@ class MailService:
 
         try:
             result = await handler(arguments)
+            if isinstance(result, list):
+                result = self._filter_by_addresses(result)
+            elif isinstance(result, dict) and "from" in result:
+                filtered = self._filter_single_by_addresses(result)
+                if filtered is None:
+                    result = {"uid": result.get("uid", ""), "error": "Address outside scope"}
+                else:
+                    result = filtered
             return json.dumps(result, default=str, ensure_ascii=False)
         except ScopeError as exc:
             return json.dumps({"error": str(exc), "type": "scope_error"})
@@ -195,6 +203,18 @@ class MailService:
         if client is None:
             raise ServiceUnavailableError(f"Mail account '{account}' is not connected")
         return client
+
+    def _filter_by_addresses(self, messages: list[dict]) -> list[dict]:
+        if not self._scope.config.mail_addresses:
+            return messages
+        return [m for m in messages if self._scope.mail_address_visible(m.get("from") or "")]
+
+    def _filter_single_by_addresses(self, msg: dict) -> dict | None:
+        if not self._scope.config.mail_addresses:
+            return msg
+        if self._scope.mail_address_visible(msg.get("from") or ""):
+            return msg
+        return None
 
     def _get_account_config(self, email: str):
 

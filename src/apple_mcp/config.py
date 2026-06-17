@@ -45,6 +45,8 @@ class ServerConfig(BaseModel):
 
     mail_accounts: list[MailAccountConfig] = Field(default_factory=list)
 
+    mail_addresses: list[str] = Field(default_factory=list)
+
     calendar_password: str = Field(default="")
     reminders_password: str = Field(default="")
     mail_password: str = Field(default="")
@@ -136,6 +138,7 @@ def load_config() -> ServerConfig:
         mail_exclude_folders=_parse_comma_list(os.getenv("APPLE_MAIL_EXCLUDE_FOLDERS")),
         mail_mode=os.getenv("APPLE_MAIL_MODE", "read_write"),
         mail_accounts=mail_accounts,
+        mail_addresses=_parse_comma_list(os.getenv("APPLE_MAIL_ADDRESSES")),
         calendar_password=os.getenv("APPLE_CALENDAR_PASSWORD", ""),
         reminders_password=os.getenv("APPLE_REMINDERS_PASSWORD", ""),
         mail_password=os.getenv("APPLE_MAIL_PASSWORD", ""),

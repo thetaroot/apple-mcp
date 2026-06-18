@@ -70,38 +70,32 @@ class AppleMCPServer:
                 self._all_tools.append(tool)
                 self._tool_handler[tool.name] = svc
 
+        if self._auth_status and self._auth_status.errors:
+            diag: dict[str, str] = {}
+            for svc_name in ("calendar", "reminders", "mail"):
+                ok = getattr(self._auth_status, f"{svc_name}_ok", False)
+                if ok:
+                    diag[svc_name] = "ok"
+                else:
+                    err = self._auth_status.errors.get(svc_name, "auth_failed")
+                    if "2FA" in str(err) or "2fa" in str(err):
+                        diag[svc_name] = "2fa_required"
+                    elif "password" in str(err).lower() or "login failed" in str(err).lower():
+                        diag[svc_name] = "auth_failed"
+                    else:
+                        diag[svc_name] = str(err)
+            self._all_tools.append(
+                Tool(
+                    name="_sg_auth_status",
+                    description=json.dumps(diag),
+                    inputSchema={"type": "object", "properties": {}},
+                )
+            )
+
         @self._mcp.list_tools()
         async def list_tools() -> list[Tool]:
             await self._auth_ready.wait()
-            result = list(self._all_tools)
-            import logging
-            _log = logging.getLogger("apple_mcp.server")
-            _log.info("list_tools: auth_status=%s errors=%s all_tools=%d",
-                      bool(self._auth_status),
-                      self._auth_status.errors if self._auth_status else None,
-                      len(self._all_tools))
-            if self._auth_status and self._auth_status.errors:
-                diag: dict[str, str] = {}
-                for svc in ("calendar", "reminders", "mail"):
-                    ok = getattr(self._auth_status, f"{svc}_ok", False)
-                    if ok:
-                        diag[svc] = "ok"
-                    else:
-                        err = self._auth_status.errors.get(svc, "auth_failed")
-                        if "2FA" in err or "2fa" in err:
-                            diag[svc] = "2fa_required"
-                        elif "password" in err.lower() or "login failed" in err.lower():
-                            diag[svc] = "auth_failed"
-                        else:
-                            diag[svc] = err
-                result.append(
-                    Tool(
-                        name="_sg_auth_status",
-                        description=json.dumps(diag),
-                        inputSchema={"type": "object", "properties": {}},
-                    )
-                )
-            return result
+            return self._all_tools
 
         @self._mcp.call_tool()
         async def call_tool(name: str, arguments: dict) -> list[TextContent]:

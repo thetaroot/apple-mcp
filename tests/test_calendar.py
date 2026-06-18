@@ -1,5 +1,5 @@
-import json
 import asyncio
+import json
 from unittest.mock import MagicMock
 
 from apple_mcp.services.calendar import CalendarService
@@ -38,11 +38,13 @@ class TestCalendarService:
 
     def test_list_calendars_filtered(self, scoped_config):
         scope = ScopeEngine(scoped_config)
-        client = self._make_caldav([
-            FakeCalendar("Work", ctag="ct1"),
-            FakeCalendar("Personal", ctag="ct2"),
-            FakeCalendar("SwiftGate Dev", ctag="ct3"),
-        ])
+        client = self._make_caldav(
+            [
+                FakeCalendar("Work", ctag="ct1"),
+                FakeCalendar("Personal", ctag="ct2"),
+                FakeCalendar("SwiftGate Dev", ctag="ct3"),
+            ]
+        )
         svc = CalendarService(client, scope)
         result = svc._list_calendars({})
         names = [c["name"] for c in result]
@@ -62,10 +64,17 @@ class TestCalendarService:
         scope = ScopeEngine(readonly_config)
         client = self._make_caldav([FakeCalendar("Work")])
         svc = CalendarService(client, scope)
-        result = asyncio.run(svc.handle("apple_calendar_create_event", {
-            "calendar_name": "Work", "title": "Test",
-            "start_date": "2026-06-20T09:00:00", "end_date": "2026-06-20T10:00:00",
-        }))
+        result = asyncio.run(
+            svc.handle(
+                "apple_calendar_create_event",
+                {
+                    "calendar_name": "Work",
+                    "title": "Test",
+                    "start_date": "2026-06-20T09:00:00",
+                    "end_date": "2026-06-20T10:00:00",
+                },
+            )
+        )
         parsed = json.loads(result)
         assert "error" in parsed or "scope_error" in parsed.get("type", "")
 

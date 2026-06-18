@@ -53,10 +53,42 @@ class AuthService:
                     self.pyicloud = PyiCloudService(self.config.apple_id, reminders_pw)
 
                     if self.pyicloud.requires_2fa or self.pyicloud.requires_2sa:
-                        status.errors["reminders"] = (
-                            "2FA required for Reminders. Use an app-specific password for "
-                            "Calendar and Mail, and your main password for Reminders."
-                        )
+                        if self.config.twofa_code:
+                            try:
+                                code = self.config.twofa_code.strip()
+                                if self.pyicloud.requires_2fa:
+                                    result = self.pyicloud.validate_2fa_code(code)
+                                else:
+                                    self.pyicloud.send_verification_code(
+                                        self.pyicloud.trusted_devices[0]
+                                    )
+                                    result = self.pyicloud.validate_verification_code(
+                                        self.pyicloud.trusted_devices[0], code
+                                    )
+                                if result:
+                                    if not self.pyicloud.is_trusted_session:
+                                        self.pyicloud.trust_session()
+                                    self.pyicloud.reminders.lists()
+                                    status.reminders_ok = True
+                                else:
+                                    status.errors["reminders"] = "2FA code invalid. Check the code and try again."
+                            except Exception as exc:
+                                status.errors["reminders"] = f"2FA validation failed: {exc}"
+                                logger.warning("2FA validation failed: %s", exc)
+                        else:
+                            try:
+                                if self.pyicloud.requires_2fa:
+                                    self.pyicloud.request_2fa_code()
+                                else:
+                                    self.pyicloud.send_verification_code(
+                                        self.pyicloud.trusted_devices[0]
+                                    )
+                            except Exception as exc:
+                                logger.warning("2FA request failed: %s", exc)
+                            status.errors["reminders"] = (
+                                "2FA required. A verification code has been sent to your "
+                                "trusted devices. Enter it as APPLE_2FA_CODE and reconnect."
+                            )
                     else:
                         self.pyicloud.reminders.lists()
                         status.reminders_ok = True

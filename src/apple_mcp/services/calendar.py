@@ -5,7 +5,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from caldav import Calendar, DAVClient
+from caldav import Calendar
 from caldav.elements import dav
 from mcp.types import Tool
 

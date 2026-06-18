@@ -59,9 +59,7 @@ class AuthService:
                                 if self.pyicloud.requires_2fa:
                                     result = self.pyicloud.validate_2fa_code(code)
                                 else:
-                                    self.pyicloud.send_verification_code(
-                                        self.pyicloud.trusted_devices[0]
-                                    )
+                                    self.pyicloud.send_verification_code(self.pyicloud.trusted_devices[0])
                                     result = self.pyicloud.validate_verification_code(
                                         self.pyicloud.trusted_devices[0], code
                                     )
@@ -80,9 +78,7 @@ class AuthService:
                                 if self.pyicloud.requires_2fa:
                                     self.pyicloud.request_2fa_code()
                                 else:
-                                    self.pyicloud.send_verification_code(
-                                        self.pyicloud.trusted_devices[0]
-                                    )
+                                    self.pyicloud.send_verification_code(self.pyicloud.trusted_devices[0])
                             except Exception as exc:
                                 logger.warning("2FA request failed: %s", exc)
                             status.errors["reminders"] = (

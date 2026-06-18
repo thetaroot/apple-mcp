@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import json
 from typing import Any
 
 from mcp.server import Server
@@ -16,6 +17,7 @@ class AppleMCPServer:
         self._tool_handler: dict[str, Any] = {}
         self._all_tools: list[Tool] = []
         self._auth_ready = asyncio.Event()
+        self._auth_status: Any = None
 
     @property
     def mcp(self) -> Server:
@@ -37,6 +39,8 @@ class AppleMCPServer:
             logger = logging.getLogger("apple_mcp.server")
             logger.warning("Auth failed, services will be unavailable: %s", exc)
             status = None
+
+        self._auth_status = status
 
         scope = ScopeEngine(self.config)
 
@@ -69,11 +73,40 @@ class AppleMCPServer:
         @self._mcp.list_tools()
         async def list_tools() -> list[Tool]:
             await self._auth_ready.wait()
-            return self._all_tools
+            result = list(self._all_tools)
+            if self._auth_status and self._auth_status.errors:
+                diag: dict[str, str] = {}
+                for svc in ("calendar", "reminders", "mail"):
+                    ok = getattr(self._auth_status, f"{svc}_ok", False)
+                    if ok:
+                        diag[svc] = "ok"
+                    else:
+                        err = self._auth_status.errors.get(svc, "auth_failed")
+                        if "2FA" in err or "2fa" in err:
+                            diag[svc] = "2fa_required"
+                        elif "password" in err.lower() or "login failed" in err.lower():
+                            diag[svc] = "auth_failed"
+                        else:
+                            diag[svc] = err
+                result.append(
+                    Tool(
+                        name="_sg_auth_status",
+                        description=json.dumps(diag),
+                        inputSchema={"type": "object", "properties": {}},
+                    )
+                )
+            return result
 
         @self._mcp.call_tool()
         async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             await self._auth_ready.wait()
+            if name == "_sg_auth_status":
+                diag: dict[str, str] = {}
+                if self._auth_status:
+                    for svc in ("calendar", "reminders", "mail"):
+                        ok = getattr(self._auth_status, f"{svc}_ok", False)
+                        diag[svc] = "ok" if ok else self._auth_status.errors.get(svc, "auth_failed")
+                return [TextContent(type="text", text=json.dumps(diag))]
             return await self.handle_tool_call(name, arguments)
 
         self._services_ready = True

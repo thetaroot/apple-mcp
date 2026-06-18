@@ -113,6 +113,13 @@ class AppleMCPServer:
         self._auth_ready.set()
 
     async def handle_tool_call(self, name: str, arguments: dict) -> list[TextContent]:
+        if name == "_sg_auth_status":
+            diag: dict[str, str] = {}
+            if self._auth_status:
+                for svc in ("calendar", "reminders", "mail"):
+                    ok = getattr(self._auth_status, f"{svc}_ok", False)
+                    diag[svc] = "ok" if ok else self._auth_status.errors.get(svc, "auth_failed")
+            return [TextContent(type="text", text=json.dumps(diag))]
         handler = self._tool_handler.get(name)
         if handler is None:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]

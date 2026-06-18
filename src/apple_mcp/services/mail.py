@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -182,7 +183,7 @@ class MailService:
             return json.dumps({"error": f"Unknown tool: {name}"})
 
         try:
-            result = await handler(arguments)
+            result = await asyncio.wait_for(handler(arguments), timeout=30.0)
             if isinstance(result, list):
                 result = self._filter_by_addresses(result)
             elif isinstance(result, dict) and "from" in result:
@@ -192,6 +193,9 @@ class MailService:
                 else:
                     result = filtered
             return json.dumps(result, default=str, ensure_ascii=False)
+        except TimeoutError:
+            logger.error("Mail tool %s timed out after 30s", name)
+            return json.dumps({"error": f"Tool {name} timed out after 30s", "type": "timeout_error"})
         except ScopeError as exc:
             return json.dumps({"error": str(exc), "type": "scope_error"})
         except Exception as exc:

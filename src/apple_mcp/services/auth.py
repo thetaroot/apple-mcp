@@ -52,7 +52,12 @@ class AuthService:
                 )
             else:
                 try:
-                    self.pyicloud = await asyncio.to_thread(PyiCloudService, self.config.apple_id, reminders_pw)
+                    kwargs: dict[str, Any] = {}
+                    if self.config.cookie_directory:
+                        kwargs["cookie_directory"] = self.config.cookie_directory
+                    self.pyicloud = await asyncio.to_thread(
+                        PyiCloudService, self.config.apple_id, reminders_pw, **kwargs
+                    )
 
                     if self.pyicloud.requires_2fa or self.pyicloud.requires_2sa:
                         if self.config.twofa_code:

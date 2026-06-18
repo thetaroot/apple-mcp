@@ -68,6 +68,14 @@ class TestServerConfig:
         )
         assert config.has_any_service is False
 
+    def test_cookie_directory_default_empty(self):
+        config = ServerConfig(apple_id="t@t.com", app_specific_password="p")
+        assert config.cookie_directory == ""
+
+    def test_cookie_directory_set(self):
+        config = ServerConfig(apple_id="t@t.com", app_specific_password="p", cookie_directory="/data/pyicloud")
+        assert config.cookie_directory == "/data/pyicloud"
+
 
 class TestLoadConfig:
     def test_load_from_env(self, monkeypatch):
@@ -82,7 +90,13 @@ class TestLoadConfig:
         assert config.enable_calendar is False
         assert config.calendar_names == ["Work", "Projects"]
 
-    def test_load_with_external_mail(self, monkeypatch):
+    def test_load_with_cookie_directory(self, monkeypatch):
+        monkeypatch.setenv("APPLE_ID", "t@t.com")
+        monkeypatch.setenv("APPLE_APP_SPECIFIC_PASSWORD", "pw")
+        monkeypatch.setenv("APPLE_COOKIE_DIRECTORY", "/data/pyicloud")
+
+        config = load_config()
+        assert config.cookie_directory == "/data/pyicloud"
         monkeypatch.setenv("APPLE_ID", "t@t.com")
         monkeypatch.setenv("APPLE_APP_SPECIFIC_PASSWORD", "pw")
         monkeypatch.setenv(

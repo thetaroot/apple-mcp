@@ -19,8 +19,8 @@ RUN if [ -n "$(ls /tmp/dist/*.whl 2>/dev/null)" ]; then \
 
 USER nobody
 
-HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import apple_mcp; print(apple_mcp.__version__.VERSION)" || exit 1
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
 
 EXPOSE 8080
 

@@ -5,10 +5,15 @@ services:
       dockerfile: docker/Dockerfile
     ports:
       - "8080:8080"
+    volumes:
+      - apple-mcp-session:/data/pyicloud
     environment:
       # Required
       - APPLE_ID=${APPLE_ID}
       - APPLE_APP_SPECIFIC_PASSWORD=${APPLE_APP_SPECIFIC_PASSWORD}
+
+      # Session persistence (stores iCloud cookies across restarts)
+      - APPLE_COOKIE_DIRECTORY=/data/pyicloud
 
       # Service toggles (optional)
       - APPLE_ENABLE_CALENDAR=${APPLE_ENABLE_CALENDAR:-true}
@@ -35,7 +40,11 @@ services:
       # APPLE_MAIL_ACCOUNTS='[{"type":"external","email":"luis@company.com","imap_host":"mail.company.com","imap_port":993,"smtp_host":"mail.company.com","smtp_port":587,"password_env":"MAIL_PWD_WORK","folders_allow":["INBOX","Sent"]}]'
       # MAIL_PWD_WORK=${MAIL_PWD_WORK}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 30s
       timeout: 10s
+      start_period: 30s
       retries: 3
+
+volumes:
+  apple-mcp-session:

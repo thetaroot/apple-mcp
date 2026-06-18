@@ -1,4 +1,5 @@
 # mypy: ignore-errors
+import asyncio
 import contextlib
 import json
 import logging
@@ -209,8 +210,14 @@ class CalendarService:
         if handler is None:
             return json.dumps({"error": f"Unknown tool: {name}"})
         try:
-            result = handler(arguments)
+            result = await asyncio.wait_for(
+                asyncio.to_thread(handler, arguments),
+                timeout=30.0,
+            )
             return json.dumps(result, default=str, ensure_ascii=False)
+        except TimeoutError:
+            logger.error("Calendar tool %s timed out after 30s", name)
+            return json.dumps({"error": f"Tool {name} timed out after 30s", "type": "timeout_error"})
         except ScopeError as exc:
             return json.dumps({"error": str(exc), "type": "scope_error"})
         except Exception as exc:

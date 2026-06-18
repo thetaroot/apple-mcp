@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.0.7 — Production Hardening + Runtime Re-Auth
+
+### Fixes
+
+- **Dockerfile healthcheck broken** — `apple_mcp.__version__.VERSION` failed because `__version__` is a string, not the module. Replaced with functional HTTP check against `/health` endpoint.
+- **Tool calls could hang indefinitely** — all service handlers (Calendar, Reminders, Mail) now enforce a 30-second timeout via `asyncio.wait_for`. Agents receive a clear `timeout_error` response instead of waiting forever.
+
+### New Features
+
+- **Runtime re-authentication** — three new tools allow agents and UIs to manage auth without container restarts:
+  - `apple_auth_status` — per-service status: `ok`, `auth_failed`, `2fa_required`, `disabled`
+  - `apple_auth_reconnect` — re-authenticate all services on demand
+  - `apple_auth_submit_2fa` — submit a 2FA code to complete authentication
+- **Session persistence** — new `APPLE_COOKIE_DIRECTORY` env var + Docker volume mount. iCloud sessions survive container restarts; 2FA is only needed every ~60–90 days instead of on every restart.
+- **Enhanced `/health` endpoint** — returns per-service auth status, overall `ok`/`degraded` indicator, and HTTP 503 when services are unavailable.
+
+### Improvements
+
+- `compose.yml` healthcheck changed from `curl` to Python `urllib` (no extra dependency in slim image)
+- `compose.yml` includes session volume and `APPLE_COOKIE_DIRECTORY` by default
+- Docker healthcheck `start-period` increased from 5s to 30s to allow for auth
+- Replaced internal `_sg_auth_status` tool with public `apple_auth_*` tools
+
 ## 2.0.0 — CalDAV Architecture
 
 Major architecture change: Calendar now uses CalDAV instead of the iCloud web API. This is necessary because Apple's SRP authentication flow is incompatible with app-specific passwords. CalDAV uses HTTP Basic Auth, which works correctly with app-specific passwords.

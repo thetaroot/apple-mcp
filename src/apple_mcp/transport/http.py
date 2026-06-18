@@ -83,13 +83,39 @@ def _serialize_tools(tools: list[Tool]) -> list[dict[str, Any]]:
 async def _handle_health(request: Request) -> JSONResponse:
     server = request.app.state.server
     tool_count = len(server._tool_handler)
-    return JSONResponse(
-        {
-            "status": "ok",
-            "version": VERSION,
-            "tools_registered": tool_count,
-        }
-    )
+
+    services: dict[str, str] = {}
+    for svc_name in ("calendar", "reminders", "mail"):
+        enabled = getattr(server.config, f"enable_{svc_name}", False)
+        if not enabled:
+            services[svc_name] = "disabled"
+        elif server._auth_status and getattr(server._auth_status, f"{svc_name}_ok", False):
+            services[svc_name] = "ok"
+        elif server._auth_status and svc_name in server._auth_status.errors:
+            err = server._auth_status.errors[svc_name]
+            if "2FA" in str(err) or "2fa" in str(err):
+                services[svc_name] = "2fa_required"
+            else:
+                services[svc_name] = "auth_failed"
+        else:
+            services[svc_name] = "unavailable"
+
+    any_ok = any(v == "ok" for v in services.values())
+    all_disabled = all(v == "disabled" for v in services.values())
+
+    overall = "ok" if any_ok or all_disabled else "degraded"
+
+    body = {
+        "status": overall,
+        "version": VERSION,
+        "tools_registered": tool_count,
+        "services": services,
+    }
+
+    if server._auth_status and server._auth_status.errors:
+        body["errors"] = server._auth_status.errors
+
+    return JSONResponse(body, status_code=200 if overall == "ok" else 503)
 
 
 def create_http_app(apple_mcp_server) -> Starlette:

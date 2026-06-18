@@ -53,6 +53,8 @@ class ServerConfig(BaseModel):
     reminders_password: str = Field(default="")
     mail_password: str = Field(default="")
 
+    cookie_directory: str = Field(default="")
+
     log_level: str = "INFO"
 
     def model_post_init(self, _context: object) -> None:
@@ -86,7 +88,13 @@ class ServerConfig(BaseModel):
 
     def __repr__(self) -> str:
         safe = self.model_dump()
-        for field in ("app_specific_password", "calendar_password", "reminders_password", "mail_password"):
+        for field in (
+            "app_specific_password",
+            "icloud_password",
+            "calendar_password",
+            "reminders_password",
+            "mail_password",
+        ):
             if safe.get(field):
                 safe[field] = "***"
         return f"ServerConfig({json.dumps(safe)})"
@@ -146,5 +154,6 @@ def load_config() -> ServerConfig:
         calendar_password=os.getenv("APPLE_CALENDAR_PASSWORD", ""),
         reminders_password=os.getenv("APPLE_REMINDERS_PASSWORD", ""),
         mail_password=os.getenv("APPLE_MAIL_PASSWORD", ""),
+        cookie_directory=os.getenv("APPLE_COOKIE_DIRECTORY", ""),
         log_level=os.getenv("APPLE_MCP_LOG_LEVEL", "INFO"),
     )

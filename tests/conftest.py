@@ -52,3 +52,20 @@ def mock_pyicloud():
     cloud = MagicMock()
     cloud.authenticate.return_value = None
     return cloud
+
+
+@pytest.fixture
+def mock_caldav():
+    cal = MagicMock()
+    cal.name = "Work"
+    cal.url = "https://caldav.icloud.com/calendars/work"
+    cal.search.return_value = []
+    cal.get_property_value.return_value = "ctag123"
+
+    principal = MagicMock()
+    principal.calendars.return_value = [cal]
+
+    client = MagicMock()
+    client.principal.return_value = principal
+
+    return client

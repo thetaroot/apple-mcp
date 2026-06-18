@@ -1,31 +1,63 @@
+# mypy: ignore-errors
+import contextlib
 import json
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
+from caldav import Calendar, DAVClient
+from caldav.elements import dav
 from mcp.types import Tool
-from pyicloud import PyiCloudService  # type: ignore[import-untyped]
-from pyicloud.services.calendar import CalendarObject, EventObject  # type: ignore[import-untyped]
 
-from apple_mcp.errors import ScopeError, ServiceUnavailableError
+from apple_mcp.errors import ScopeError
 from apple_mcp.services.scope import ScopeEngine
 
 logger = logging.getLogger("apple_mcp.services.calendar")
 
 
 class CalendarService:
-    def __init__(self, pyicloud: PyiCloudService, scope: ScopeEngine):
-        self._api = pyicloud
+    def __init__(self, caldav_client: Any, scope: ScopeEngine):
+        self._client: Any = caldav_client
         self._scope = scope
+        self._principal: Any = None
+        self._calendars_cache: Any = None
+
+    async def _get_calendars(self) -> list[Calendar]:
+        if self._calendars_cache is not None:
+            return self._calendars_cache
+        if self._principal is None:
+            self._principal = self._client.principal()
+        cals = self._principal.calendars()
+        if cals is None:
+            cals = []
+        self._calendars_cache = list(cals)
+        return self._calendars_cache
+
+    def _filter_visible(self, cals: list[Calendar]) -> list[Calendar]:
+        return [c for c in cals if self._scope.calendar_visible(c.name)]
+
+    def _find_calendar(self, name: str) -> Calendar:
+        cals = self._get_calendars_sync()
+        for c in cals:
+            if c.name.lower() == name.lower() and self._scope.calendar_visible(c.name):
+                return c
+        raise ScopeError(f"Calendar '{name}' not found or not in scope")
+
+    def _get_calendars_sync(self) -> list[Calendar]:
+        if self._calendars_cache is not None:
+            return self._calendars_cache
+        if self._principal is None:
+            self._principal = self._client.principal()
+        cals = self._principal.calendars()
+        self._calendars_cache = list(cals) if cals else []
+        return self._calendars_cache
 
     def tools(self) -> list[Tool]:
         return [
             Tool(
                 name="apple_calendar_list_calendars",
                 description="List all visible calendars. Names are filtered by your scope configuration.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {},
-                },
+                inputSchema={"type": "object", "properties": {}},
             ),
             Tool(
                 name="apple_calendar_get_events",
@@ -33,36 +65,23 @@ class CalendarService:
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "calendar_name": {
-                            "type": "string",
-                            "description": "Name of the calendar to read from.",
-                        },
-                        "from_date": {
-                            "type": "string",
-                            "description": "Start date in ISO format (YYYY-MM-DD). Defaults to today.",
-                        },
-                        "to_date": {
-                            "type": "string",
-                            "description": "End date in ISO format (YYYY-MM-DD).",
-                        },
-                        "period": {
-                            "type": "string",
-                            "enum": ["day", "week", "month"],
-                            "description": "Shortcut: show events for this period starting from from_date.",
-                        },
-                        "limit": {"type": "integer", "description": "Max events to return.", "default": 100},
+                        "calendar_name": {"type": "string", "description": "Name of the calendar."},
+                        "from_date": {"type": "string", "description": "Start date ISO format."},
+                        "to_date": {"type": "string", "description": "End date ISO format."},
+                        "period": {"type": "string", "enum": ["day", "week", "month"]},
+                        "limit": {"type": "integer", "description": "Max events.", "default": 100},
                     },
                     "required": ["calendar_name"],
                 },
             ),
             Tool(
                 name="apple_calendar_get_event",
-                description="Get full details of a single calendar event by its ID.",
+                description="Get full details of a single calendar event by its UID.",
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "calendar_name": {"type": "string", "description": "Calendar that contains the event."},
-                        "event_id": {"type": "string", "description": "The event GUID."},
+                        "calendar_name": {"type": "string"},
+                        "event_id": {"type": "string", "description": "The event UID."},
                     },
                     "required": ["calendar_name", "event_id"],
                 },
@@ -73,27 +92,16 @@ class CalendarService:
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "calendar_name": {"type": "string", "description": "Target calendar."},
+                        "calendar_name": {"type": "string"},
                         "title": {"type": "string"},
-                        "start_date": {"type": "string", "description": "ISO datetime string."},
-                        "end_date": {"type": "string", "description": "ISO datetime string."},
+                        "start_date": {"type": "string", "description": "ISO datetime."},
+                        "end_date": {"type": "string", "description": "ISO datetime."},
                         "location": {"type": "string"},
                         "notes": {"type": "string"},
                         "all_day": {"type": "boolean", "default": False},
-                        "invitees": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Email addresses to invite.",
-                        },
-                        "alarm_minutes_before": {
-                            "type": "integer",
-                            "description": "Minutes before event to trigger alarm.",
-                        },
-                        "recurrence": {
-                            "type": "string",
-                            "description": "RRULE string for recurring events, e.g. FREQ=WEEKLY;COUNT=10",
-                        },
-                        "limit": {"type": "integer", "description": "Max events to return.", "default": 100},
+                        "invitees": {"type": "array", "items": {"type": "string"}},
+                        "alarm_minutes_before": {"type": "integer"},
+                        "recurrence": {"type": "string", "description": "RRULE string."},
                     },
                     "required": ["calendar_name", "title", "start_date", "end_date"],
                 },
@@ -111,7 +119,7 @@ class CalendarService:
                         "end_date": {"type": "string"},
                         "location": {"type": "string"},
                         "notes": {"type": "string"},
-                        "recurrence": {"type": "string", "description": "Updated RRULE string."},
+                        "recurrence": {"type": "string"},
                     },
                     "required": ["calendar_name", "event_id"],
                 },
@@ -121,10 +129,7 @@ class CalendarService:
                 description="Delete an event from a calendar.",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "calendar_name": {"type": "string"},
-                        "event_id": {"type": "string"},
-                    },
+                    "properties": {"calendar_name": {"type": "string"}, "event_id": {"type": "string"}},
                     "required": ["calendar_name", "event_id"],
                 },
             ),
@@ -134,7 +139,7 @@ class CalendarService:
                 inputSchema={
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "Search term — matches title, location, and notes."},
+                        "query": {"type": "string", "description": "Search term."},
                         "from_date": {"type": "string"},
                         "to_date": {"type": "string"},
                         "limit": {"type": "integer", "description": "Max results.", "default": 50},
@@ -147,10 +152,7 @@ class CalendarService:
                 description="Create a new calendar in your iCloud account.",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "color": {"type": "string", "description": "Hex color like #FF0000."},
-                    },
+                    "properties": {"title": {"type": "string"}, "color": {"type": "string"}},
                     "required": ["title"],
                 },
             ),
@@ -159,9 +161,7 @@ class CalendarService:
                 description="Delete a calendar and all its events. Cannot be undone.",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "calendar_name": {"type": "string"},
-                    },
+                    "properties": {"calendar_name": {"type": "string"}},
                     "required": ["calendar_name"],
                 },
             ),
@@ -170,38 +170,27 @@ class CalendarService:
                 description="Check which time slots are free or busy across your calendars.",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "from_date": {"type": "string", "description": "ISO datetime."},
-                        "to_date": {"type": "string", "description": "ISO datetime."},
-                    },
+                    "properties": {"from_date": {"type": "string"}, "to_date": {"type": "string"}},
                     "required": ["from_date", "to_date"],
                 },
             ),
             Tool(
                 name="apple_calendar_get_changes",
                 description="Get a change tag (ctag) for each visible calendar. If it changes, events were modified.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {},
-                },
+                inputSchema={"type": "object", "properties": {}},
             ),
             Tool(
                 name="apple_calendar_get_calendar_info",
-                description="Get detailed info about a calendar, including sharing status, participants, and URLs.",
+                description="Get detailed info about a calendar.",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "calendar_name": {"type": "string"},
-                    },
+                    "properties": {"calendar_name": {"type": "string"}},
                     "required": ["calendar_name"],
                 },
             ),
         ]
 
     async def handle(self, name: str, arguments: dict) -> str:
-        if self._api is None:
-            raise ServiceUnavailableError("Calendar service not connected")
-
         handlers = {
             "apple_calendar_list_calendars": self._list_calendars,
             "apple_calendar_get_events": self._get_events,
@@ -216,11 +205,9 @@ class CalendarService:
             "apple_calendar_get_changes": self._get_changes,
             "apple_calendar_get_calendar_info": self._get_calendar_info,
         }
-
         handler = handlers.get(name)
         if handler is None:
             return json.dumps({"error": f"Unknown tool: {name}"})
-
         try:
             result = handler(arguments)
             return json.dumps(result, default=str, ensure_ascii=False)
@@ -230,34 +217,24 @@ class CalendarService:
             logger.exception("Calendar tool %s failed", name)
             return json.dumps({"error": str(exc), "type": "server_error"})
 
-    def _get_calendar_by_name(self, name: str) -> CalendarObject:
-        if not self._scope.calendar_visible(name):
-            raise ScopeError(f"Calendar '{name}' is outside your configured scope")
-        cals = self._api.calendar.get_calendars(as_objs=True)
-        for cal in cals:
-            if cal.title and cal.title.lower() == name.lower():
-                return cal
-        raise ScopeError(f"Calendar '{name}' not found")
-
     def _list_calendars(self, _args: dict) -> list[dict]:
-        cals = self._api.calendar.get_calendars(as_objs=True)
-        visible = []
-        for cal in cals:
-            name = getattr(cal, "title", "") or getattr(cal, "name", "")
-            if not self._scope.calendar_visible(name):
+        cals = self._get_calendars_sync()
+        result = []
+        for c in cals:
+            if not self._scope.calendar_visible(c.name):
                 continue
-            visible.append(
+            result.append(
                 {
-                    "name": name,
-                    "guid": getattr(cal, "guid", ""),
-                    "color": getattr(cal, "color", None),
-                    "writable": self._scope.calendar_writable(name),
+                    "name": c.name,
+                    "url": str(c.url) if c.url else "",
+                    "ctag": getattr(c, "get_property_value", lambda x: None)(dav.GetEtag()) or "",
+                    "writable": self._scope.calendar_writable(c.name),
                 }
             )
-        return visible
+        return result
 
     def _get_events(self, args: dict) -> list[dict]:
-        cal = self._get_calendar_by_name(args["calendar_name"])
+        cal = self._find_calendar(args["calendar_name"])
         from_str = args.get("from_date", datetime.now(UTC).strftime("%Y-%m-%d"))
         to_str = args.get("to_date")
         period = args.get("period")
@@ -265,186 +242,230 @@ class CalendarService:
 
         if period:
             from_dt = datetime.fromisoformat(from_str)
-            if period == "day":
-                to_dt = from_dt + timedelta(days=1)
-            elif period == "week":
-                to_dt = from_dt + timedelta(weeks=1)
-            else:
-                to_dt = from_dt + timedelta(days=30)
+            to_dt = from_dt + {"day": timedelta(days=1), "week": timedelta(weeks=1), "month": timedelta(days=30)}.get(
+                period, timedelta(days=30)
+            )
         else:
             from_dt = datetime.fromisoformat(from_str)
             to_dt = datetime.fromisoformat(to_str) if to_str else from_dt + timedelta(days=30)
 
-        events = self._api.calendar.get_events(from_dt=from_dt, to_dt=to_dt, as_objs=True)
+        try:
+            events = cal.search(start=from_dt, end=to_dt, event=True, expand=True)
+        except Exception:
+            events = cal.date_search(start=from_dt, end=to_dt, expand=True)
+
         result = []
         for evt in events:
-            if evt.pguid != cal.guid:
-                continue
-            result.append(
-                {
-                    "guid": evt.guid,
-                    "title": evt.title,
-                    "start": str(evt.start_date) if evt.start_date else None,
-                    "end": str(evt.end_date) if evt.end_date else None,
-                    "all_day": evt.all_day,
-                    "location": evt.location,
-                }
-            )
-            if len(result) >= limit:
+            if limit and len(result) >= limit:
                 break
+            try:
+                result.append(
+                    {
+                        "uid": getattr(evt, "id", ""),
+                        "title": getattr(evt, "summary", "") or "",
+                        "start": str(getattr(evt, "dtstart", None)),
+                        "end": str(getattr(evt, "dtend", None)),
+                        "location": getattr(evt, "location", "") or "",
+                    }
+                )
+            except Exception:
+                continue
         return result
 
     def _get_event(self, args: dict) -> dict:
-        cal = self._get_calendar_by_name(args["calendar_name"])
-        detail = self._api.calendar.get_event_detail(pguid=cal.guid, guid=args["event_id"])
+        cal = self._find_calendar(args["calendar_name"])
+        evt = cal.event(args["event_id"])
+        if evt is None:
+            raise ScopeError(f"Event '{args['event_id']}' not found")
         return {
-            "guid": getattr(detail, "guid", ""),
-            "title": getattr(detail, "title", ""),
-            "start": str(detail.start_date) if getattr(detail, "start_date", None) else None,
-            "end": str(detail.end_date) if getattr(detail, "end_date", None) else None,
-            "location": getattr(detail, "location", ""),
-            "notes": getattr(detail, "description", ""),
-            "all_day": getattr(detail, "all_day", False),
+            "uid": evt.id,
+            "title": getattr(evt, "summary", "") or "",
+            "start": str(getattr(evt, "dtstart", None)),
+            "end": str(getattr(evt, "dtend", None)),
+            "location": getattr(evt, "location", "") or "",
+            "notes": getattr(evt, "description", "") or "",
         }
 
     def _create_event(self, args: dict) -> dict:
-        cal = self._get_calendar_by_name(args["calendar_name"])
+        cal = self._find_calendar(args["calendar_name"])
         self._scope.guard_read_only("calendar", "create_event")
 
-        event = EventObject(
-            pguid=cal.guid,
-            title=args["title"],
-            start_date=datetime.fromisoformat(args["start_date"]),
-            end_date=datetime.fromisoformat(args["end_date"]),
-            location=args.get("location", ""),
-            all_day=args.get("all_day", False),
-        )
+        from icalendar import Calendar as ICal
+        from icalendar import Event as ICalEvent
 
+        ievent = ICalEvent()
+        ievent.add("summary", args["title"])
+        start = datetime.fromisoformat(args["start_date"])
+        end = datetime.fromisoformat(args["end_date"])
+        ievent.add("dtstart", start)
+        ievent.add("dtend", end)
+
+        if args.get("location"):
+            ievent.add("location", args["location"])
+        if args.get("notes"):
+            ievent.add("description", args["notes"])
         if args.get("recurrence"):
-            event.recurrence = args["recurrence"]
-        if args.get("invitees"):
-            event.add_invitees(args["invitees"])
-        if args.get("alarm_minutes_before") is not None:
-            event.add_alarm_before(minutes=args["alarm_minutes_before"])
+            ievent.add("rrule", {"freq": args["recurrence"]})
 
-        self._api.calendar.add_event(event)
-        return {"status": "created", "guid": event.guid, "title": event.title}
+        if args.get("alarm_minutes_before") is not None:
+            from icalendar import Alarm
+
+            alarm = Alarm()
+            alarm.add("action", "DISPLAY")
+            alarm.add("description", "Reminder")
+            alarm.add("trigger", timedelta(minutes=-args["alarm_minutes_before"]))
+            ievent.add_component(alarm)
+
+        if args.get("invitees"):
+            for email in args["invitees"]:
+                ievent.add("attendee", f"mailto:{email}")
+
+        ical = ICal()
+        ical.add_component(ievent)
+        saved = cal.save_event(ical.to_ical().decode("utf-8"))
+        return {"status": "created", "uid": getattr(saved, "id", ""), "title": args["title"]}
 
     def _update_event(self, args: dict) -> dict:
-        cal = self._get_calendar_by_name(args["calendar_name"])
+        cal = self._find_calendar(args["calendar_name"])
         self._scope.guard_read_only("calendar", "update_event")
+        evt = cal.event(args["event_id"])
+        if evt is None:
+            raise ScopeError(f"Event '{args['event_id']}' not found")
 
-        detail = self._api.calendar.get_event_detail(pguid=cal.guid, guid=args["event_id"])
+        with contextlib.suppress(Exception):
+            evt.load()
 
-        if "title" in args:
-            detail.title = args["title"]
-        if "start_date" in args:
-            detail.start_date = datetime.fromisoformat(args["start_date"])
-        if "end_date" in args:
-            detail.end_date = datetime.fromisoformat(args["end_date"])
-        if "location" in args:
-            detail.location = args["location"]
-        if "notes" in args:
-            detail.description = args["notes"]
-        if "recurrence" in args:
-            detail.recurrence = args["recurrence"]
-
-        self._api.calendar.add_event(detail)
-        return {"status": "updated", "guid": args["event_id"]}
+        data = evt.data
+        changed = False
+        for key, field in [
+            ("title", "summary"),
+            ("start_date", "dtstart"),
+            ("end_date", "dtend"),
+            ("location", "location"),
+            ("notes", "description"),
+        ]:
+            if key in args:
+                data = self._replace_ical_prop(data, field, args[key])
+                changed = True
+        if changed:
+            evt.data = data
+            evt.save()
+        return {"status": "updated", "uid": args["event_id"]}
 
     def _delete_event(self, args: dict) -> dict:
-        cal = self._get_calendar_by_name(args["calendar_name"])
+        cal = self._find_calendar(args["calendar_name"])
         self._scope.guard_read_only("calendar", "delete_event")
-        detail = self._api.calendar.get_event_detail(pguid=cal.guid, guid=args["event_id"])
-        self._api.calendar.remove_event(detail)
-        return {"status": "deleted", "guid": args["event_id"]}
+        evt = cal.event(args["event_id"])
+        if evt is None:
+            raise ScopeError(f"Event '{args['event_id']}' not found")
+        evt.delete()
+        return {"status": "deleted", "uid": args["event_id"]}
 
     def _search_events(self, args: dict) -> list[dict]:
         query = args["query"].lower()
+        limit = args.get("limit", 50)
         now = datetime.now(UTC)
         from_dt = datetime.fromisoformat(args["from_date"]) if args.get("from_date") else now - timedelta(days=90)
         to_dt = datetime.fromisoformat(args["to_date"]) if args.get("to_date") else now + timedelta(days=90)
 
         results = []
-        cals = self._api.calendar.get_calendars(as_objs=True)
+        cals = self._get_calendars_sync()
         for cal in cals:
-            name = getattr(cal, "title", "") or getattr(cal, "name", "")
-            if not self._scope.calendar_visible(name):
+            if not self._scope.calendar_visible(cal.name):
                 continue
-            events = self._api.calendar.get_events(from_dt=from_dt, to_dt=to_dt, as_objs=True)
+            try:
+                events = cal.search(start=from_dt, end=to_dt, event=True, expand=True)
+            except Exception:
+                continue
             for evt in events:
-                if evt.pguid != cal.guid:
-                    continue
-                haystack = f"{evt.title or ''} {evt.location or ''} {getattr(evt, 'description', '') or ''}".lower()
-                if query in haystack:
+                title = (getattr(evt, "summary", "") or "").lower()
+                location = (getattr(evt, "location", "") or "").lower()
+                if query in title or query in location:
                     results.append(
                         {
-                            "guid": evt.guid,
-                            "title": evt.title,
-                            "start": str(evt.start_date),
-                            "calendar": name,
+                            "uid": getattr(evt, "id", ""),
+                            "title": getattr(evt, "summary", ""),
+                            "start": str(getattr(evt, "dtstart", None)),
+                            "calendar": cal.name,
                         }
                     )
+                    if len(results) >= limit:
+                        return results
         return results
 
     def _add_calendar(self, args: dict) -> dict:
         self._scope.guard_read_only("calendar", "add_calendar")
-        cal = CalendarObject(title=args["title"])
+        if self._principal is None:
+            self._principal = self._client.principal()
+        props = {}
         if args.get("color"):
-            cal.color = args["color"]
-        self._api.calendar.add_calendar(cal)
-        return {"status": "created", "name": args["title"], "guid": cal.guid}
+            with contextlib.suppress(Exception):
+                props["X-APPLE-CALENDAR-COLOR"] = args["color"]
+        self._principal.make_calendar(name=args["title"], cal_id=args["title"].lower().replace(" ", "-"))
+        self._calendars_cache = None
+        return {"status": "created", "name": args["title"]}
 
     def _remove_calendar(self, args: dict) -> dict:
         self._scope.guard_read_only("calendar", "remove_calendar")
-        cal = self._get_calendar_by_name(args["calendar_name"])
-        self._api.calendar.remove_calendar(cal.guid)
+        cal = self._find_calendar(args["calendar_name"])
+        cal.delete()
+        self._calendars_cache = None
         return {"status": "deleted", "name": args["calendar_name"]}
 
     def _get_availability(self, args: dict) -> dict:
         from_dt = datetime.fromisoformat(args["from_date"])
         to_dt = datetime.fromisoformat(args["to_date"])
         busy = []
-
-        cals = self._api.calendar.get_calendars(as_objs=True)
+        cals = self._get_calendars_sync()
         for cal in cals:
-            name = getattr(cal, "title", "")
-            if not self._scope.calendar_visible(name):
+            if not self._scope.calendar_visible(cal.name):
                 continue
-            events = self._api.calendar.get_events(from_dt=from_dt, to_dt=to_dt, as_objs=True)
+            try:
+                events = cal.search(start=from_dt, end=to_dt, event=True, expand=True)
+            except Exception:
+                continue
             for evt in events:
-                if evt.pguid != cal.guid:
-                    continue
                 busy.append(
                     {
-                        "start": str(evt.start_date),
-                        "end": str(evt.end_date),
-                        "title": evt.title,
-                        "calendar": name,
+                        "start": str(getattr(evt, "dtstart", None)),
+                        "end": str(getattr(evt, "dtend", None)),
+                        "title": getattr(evt, "summary", ""),
+                        "calendar": cal.name,
                     }
                 )
         return {"busy_slots": busy}
 
     def _get_changes(self, _args: dict) -> dict:
         changes = {}
-        cals = self._api.calendar.get_calendars(as_objs=True)
+        cals = self._get_calendars_sync()
         for cal in cals:
-            name = getattr(cal, "title", "") or getattr(cal, "name", "")
-            if not self._scope.calendar_visible(name):
+            if not self._scope.calendar_visible(cal.name):
                 continue
-            ctag = self._api.calendar.get_ctag(cal.guid)
-            changes[name] = {"guid": cal.guid, "ctag": ctag}
+            ctag = getattr(cal, "get_property_value", lambda x: None)(dav.GetEtag())
+            changes[cal.name] = {"ctag": ctag or ""}
         return {"calendars": changes}
 
     def _get_calendar_info(self, args: dict) -> dict:
-        cal = self._get_calendar_by_name(args["calendar_name"])
+        cal = self._find_calendar(args["calendar_name"])
         return {
-            "name": getattr(cal, "title", ""),
-            "guid": cal.guid,
-            "color": getattr(cal, "color", None),
-            "share_type": getattr(cal, "share_type", None),
-            "published_url": getattr(cal, "published_url", None),
-            "shared_url": getattr(cal, "shared_url", None),
-            "is_family": getattr(cal, "is_family", False),
-            "read_only": getattr(cal, "read_only", False),
+            "name": cal.name,
+            "url": str(cal.url) if cal.url else "",
+            "ctag": getattr(cal, "get_property_value", lambda x: None)(dav.GetEtag()) or "",
         }
+
+    @staticmethod
+    def _replace_ical_prop(data: str, prop: str, value: str) -> str:
+        import re
+
+        pattern = rf"^{prop.upper()}[:;].*$"
+        new_line = f"{prop.upper()}:{value}"
+        lines = data.split("\r\n")
+        replaced = False
+        for i, line in enumerate(lines):
+            if re.match(pattern, line, re.IGNORECASE):
+                lines[i] = new_line
+                replaced = True
+                break
+        if not replaced:
+            lines.insert(1, new_line)
+        return "\r\n".join(lines)

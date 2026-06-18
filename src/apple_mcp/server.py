@@ -47,7 +47,7 @@ class AppleMCPServer:
         if status and self.config.enable_calendar and status.calendar_ok:
             from apple_mcp.services.calendar import CalendarService
 
-            calendar_service = CalendarService(auth.pyicloud, scope)
+            calendar_service = CalendarService(auth.caldav, scope)
 
         if status and self.config.enable_reminders and status.reminders_ok:
             from apple_mcp.services.reminders import RemindersService

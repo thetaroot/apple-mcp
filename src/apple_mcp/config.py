@@ -26,6 +26,7 @@ class MailAccountConfig(BaseModel):
 class ServerConfig(BaseModel):
     apple_id: str = Field(default="")
     app_specific_password: str = Field(default="")
+    icloud_password: str = Field(default="")
 
     enable_calendar: bool = True
     enable_reminders: bool = True
@@ -125,6 +126,7 @@ def load_config() -> ServerConfig:
     return ServerConfig(
         apple_id=os.getenv("APPLE_ID", ""),
         app_specific_password=os.getenv("APPLE_APP_SPECIFIC_PASSWORD", ""),
+        icloud_password=os.getenv("APPLE_ICLOUD_PASSWORD", ""),
         enable_calendar=os.getenv("APPLE_ENABLE_CALENDAR", "true").lower() == "true",
         enable_reminders=os.getenv("APPLE_ENABLE_REMINDERS", "true").lower() == "true",
         enable_mail=os.getenv("APPLE_ENABLE_MAIL", "true").lower() == "true",

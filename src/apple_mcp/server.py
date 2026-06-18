@@ -74,6 +74,12 @@ class AppleMCPServer:
         async def list_tools() -> list[Tool]:
             await self._auth_ready.wait()
             result = list(self._all_tools)
+            import logging
+            _log = logging.getLogger("apple_mcp.server")
+            _log.info("list_tools: auth_status=%s errors=%s all_tools=%d",
+                      bool(self._auth_status),
+                      self._auth_status.errors if self._auth_status else None,
+                      len(self._all_tools))
             if self._auth_status and self._auth_status.errors:
                 diag: dict[str, str] = {}
                 for svc in ("calendar", "reminders", "mail"):

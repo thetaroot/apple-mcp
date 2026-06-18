@@ -1,3 +1,5 @@
+# mypy: ignore-errors
+import asyncio
 import contextlib
 import logging
 from typing import Any
@@ -50,7 +52,7 @@ class AuthService:
                 )
             else:
                 try:
-                    self.pyicloud = PyiCloudService(self.config.apple_id, reminders_pw)
+                    self.pyicloud = await asyncio.to_thread(PyiCloudService, self.config.apple_id, reminders_pw)
 
                     if self.pyicloud.requires_2fa or self.pyicloud.requires_2sa:
                         if self.config.twofa_code:

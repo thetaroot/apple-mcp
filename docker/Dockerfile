@@ -17,6 +17,8 @@ RUN if [ -n "$(ls /tmp/dist/*.whl 2>/dev/null)" ]; then \
         pip install --no-cache-dir .; \
     fi && rm -rf /tmp/dist
 
+RUN mkdir -p /data/pyicloud && chown nobody:nogroup /data/pyicloud
+
 USER nobody
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \

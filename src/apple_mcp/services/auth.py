@@ -81,13 +81,6 @@ class AuthService:
                                 status.errors["reminders"] = f"2FA validation failed: {exc}"
                                 logger.warning("2FA validation failed: %s", exc)
                         else:
-                            try:
-                                if self.pyicloud.requires_2fa:
-                                    self.pyicloud.request_2fa_code()
-                                else:
-                                    self.pyicloud.send_verification_code(self.pyicloud.trusted_devices[0])
-                            except Exception as exc:
-                                logger.warning("2FA request failed: %s", exc)
                             status.errors["reminders"] = (
                                 "2FA required. A verification code has been sent to your "
                                 "trusted devices. Enter it as APPLE_2FA_CODE and reconnect."

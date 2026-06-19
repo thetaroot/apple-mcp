@@ -71,7 +71,10 @@ class AppleMCPServer:
             elif self._auth_status and svc_name in self._auth_status.errors:
                 err = str(self._auth_status.errors[svc_name])
                 if "2FA" in err or "2fa" in err:
-                    diag[svc_name] = "2fa_required"
+                    if "invalid" in err.lower() or "validation failed" in err.lower():
+                        diag[svc_name] = "2fa_invalid"
+                    else:
+                        diag[svc_name] = "2fa_required"
                 elif "password" in err.lower() or "login failed" in err.lower():
                     diag[svc_name] = "auth_failed"
                 else:
@@ -114,6 +117,12 @@ class AppleMCPServer:
             for tool in svc.tools():
                 new_tools.append(tool)
                 new_handlers[tool.name] = svc
+
+        new_tools.append(Tool(
+            name="_sg_auth_status",
+            description=json.dumps(self._auth_status_dict()),
+            inputSchema={"type": "object", "properties": {}},
+        ))
 
         self._all_tools = new_tools
         self._tool_handler = new_handlers

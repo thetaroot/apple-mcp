@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.8 — Platform Auth Protocol + 2FA Fix
+
+### Fixes
+
+- **2FA flow broken** — platform registry expects `_sg_auth_status` sentinel tool for auth status communication. v2.0.7 removed it, causing the frontend to never show the 2FA input screen.
+- **Double 2FA push notification** — `request_2fa_code()` was called explicitly after `PyiCloudService()` already triggered Apple's automatic push. Removed the redundant call; users now receive exactly one notification.
+- **2FA invalid vs required indistinguishable** — `_auth_status_dict()` now returns `"2fa_invalid"` for wrong codes (distinct from `"2fa_required"` for initial prompt), enabling the frontend to show clear error messages.
+
+### Improvements
+
+- `_sg_auth_status` sentinel tool restored alongside public `apple_auth_*` tools. The sentinel carries JSON auth status in its `description` field for zero-latency platform integration. Public tools remain for agent/CLI use.
+- Sentinel tool is filtered from user-visible tool counts by the platform registry.
+
 ## 2.0.7 — Production Hardening + Runtime Re-Auth
 
 ### Fixes

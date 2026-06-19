@@ -97,15 +97,17 @@ class TestLoadConfig:
 
         config = load_config()
         assert config.cookie_directory == "/data/pyicloud"
+
+    def test_load_with_external_mail(self, monkeypatch):
         monkeypatch.setenv("APPLE_ID", "t@t.com")
         monkeypatch.setenv("APPLE_APP_SPECIFIC_PASSWORD", "pw")
         monkeypatch.setenv(
             "APPLE_MAIL_ACCOUNTS",
-            '[{"type":"external","email":"luis@swiftgateai.de","imap_host":"mail.swiftgateai.de",'
-            '"imap_port":993,"smtp_host":"mail.swiftgateai.de","smtp_port":587,"password_env":"EXTRA"}]',
+            '[{"type":"external","email":"user@example.com","imap_host":"imap.example.com",'
+            '"imap_port":993,"smtp_host":"smtp.example.com","smtp_port":587,"password_env":"EXTRA"}]',
         )
 
         config = load_config()
         assert len(config.mail_accounts) == 1
         assert config.mail_accounts[0].type == "external"
-        assert config.mail_accounts[0].email == "luis@swiftgateai.de"
+        assert config.mail_accounts[0].email == "user@example.com"

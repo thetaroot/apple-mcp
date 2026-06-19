@@ -118,11 +118,13 @@ class AppleMCPServer:
                 new_tools.append(tool)
                 new_handlers[tool.name] = svc
 
-        new_tools.append(Tool(
-            name="_sg_auth_status",
-            description=json.dumps(self._auth_status_dict()),
-            inputSchema={"type": "object", "properties": {}},
-        ))
+        new_tools.append(
+            Tool(
+                name="_sg_auth_status",
+                description=json.dumps(self._auth_status_dict()),
+                inputSchema={"type": "object", "properties": {}},
+            )
+        )
 
         self._all_tools = new_tools
         self._tool_handler = new_handlers
